@@ -84,7 +84,8 @@ public class SimServer {
     static void api(HttpExchange x) throws IOException {
         String origin = x.getRequestHeaders().getFirst("Origin"), host = x.getRequestHeaders().getFirst("Host");
         boolean hostOk = host != null && (host.equals("localhost:" + httpPort) || host.equals("127.0.0.1:" + httpPort));
-        if (!hostOk || (origin != null && !trustedOrigin(origin))) { send(x, 403, "text/plain", "forbidden".getBytes(StandardCharsets.UTF_8)); return; }
+        // fail closed: the page always POSTs with an Origin; a GET (img tag) or a request without Origin is not from it
+        if (!hostOk || !"POST".equals(x.getRequestMethod()) || !trustedOrigin(origin)) { send(x, 403, "text/plain", "forbidden".getBytes(StandardCharsets.UTF_8)); return; }
         Object r = dispatch(x.getRequestURI().getPath(), readBody(x));
         if (r == null) send(x, 404, "text/plain", "unknown api".getBytes(StandardCharsets.UTF_8));
         else json(x, r);
