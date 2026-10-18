@@ -241,7 +241,7 @@ function renderNameCheck() {
   };
 }
 function hideError() { $('errBox').classList.add('hidden'); }
-const esc = (s) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function fillOpModes(list) {
   app.opmodes = list;
