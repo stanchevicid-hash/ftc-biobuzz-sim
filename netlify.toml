@@ -1,0 +1,4 @@
+# Netlify serves the browser part only (field, physics, robot import, test bench, manual driving).
+# Running Java OpModes needs the local bridge: start.bat / start.sh on your computer.
+[build]
+  publish = "web"
