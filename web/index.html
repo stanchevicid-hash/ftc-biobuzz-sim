@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BIOBUZZ Sim</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2l12 7v14l-12 7-12-7V9z' fill='%23F2A900'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="vendor/fonts/fonts.css">
+<link rel="stylesheet" href="css/app.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2l12 7v14l-12 7-12-7V9z"/><path class="cell" d="M16 10l5.2 3v6L16 22l-5.2-3v-6z"/></svg>
+    <div class="brand-text"><b>BIOBUZZ Sim</b><span>FTC 2026-27</span></div>
+  </div>
+  <nav id="tabs" class="tabs" aria-label="Sections">
+    <button data-tab="ds" class="on">Match</button>
+    <button data-tab="bench">Test bench</button>
+    <button data-tab="robot">Robot</button>
+    <button data-tab="code">Code</button>
+    <button data-tab="settings">Settings</button>
+    <button data-tab="help">Help</button>
+  </nav>
+  <div id="server" class="bridge">Connecting…</div>
+</header>
+
+<main class="workspace">
+  <section id="view" class="viewport" aria-label="Field view">
+    <canvas id="c"></canvas>
+    <canvas id="ov"></canvas>
+
+    <div id="hud" class="scoreboard" title="Click for the score breakdown">
+      <div class="sb-team red"><span class="sb-label">Red</span><span id="sRed" class="sb-score">0</span></div>
+      <div class="sb-clock"><span id="phase" class="sb-phase">Practice</span><span id="timer" class="sb-time">—</span></div>
+      <div class="sb-team blue"><span id="sBlue" class="sb-score">0</span><span class="sb-label">Blue</span></div>
+    </div>
+    <div id="scoreTable" class="breakdown hidden"></div>
+
+    <div id="simInfo" class="readout"></div>
+
+    <div id="replayBar" class="replay hidden">
+      <button id="rpPlay" class="icon" aria-label="Play">▶</button>
+      <input type="range" id="rpSlider" min="0" max="1" step="0.01" value="0" aria-label="Replay time">
+      <span id="rpTime" class="num">0.0 s</span>
+      <select id="rpSpeed" aria-label="Replay speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+      <button id="rpExit">Exit replay</button>
+    </div>
+
+    <div id="keys" class="keys hidden" role="dialog" aria-label="Keyboard controls">
+      <h4>Keyboard is gamepad1</h4>
+      <span><kbd>W</kbd><kbd>S</kbd></span><span>Drive forward / back</span>
+      <span><kbd>A</kbd><kbd>D</kbd></span><span>Strafe left / right</span>
+      <span><kbd>←</kbd><kbd>→</kbd></span><span>Turn</span>
+      <span><kbd>↑</kbd><kbd>↓</kbd></span><span>Right stick up / down</span>
+      <span><kbd>Shift</kbd></span><span>Slow mode (hold)</span>
+      <span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span><span>A B X Y</span>
+      <span><kbd>Q</kbd><kbd>E</kbd></span><span>Left / right bumper</span>
+      <span><kbd>Z</kbd><kbd>C</kbd></span><span>Left / right trigger</span>
+      <span><kbd>I</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></span><span>D-pad</span>
+      <p>No OpMode running: sticks drive the robot. In TeleOp your code reads the keys like a gamepad.</p>
+    </div>
+    <div id="toolbar" class="dock">
+      <div class="seg" id="camBtns" role="group" aria-label="Camera">
+        <button data-cam="free" class="on" title="Drag to orbit, scroll to zoom">Orbit</button>
+        <button data-cam="top">Top</button>
+        <button data-cam="side">Audience</button>
+        <button data-cam="robot">Chase</button>
+        <button data-cam="driverRed">Driver</button>
+        <button id="camInset" class="on" title="Robot camera picture-in-picture">Robot cam</button>
+      </div>
+      <div class="seg" role="group" aria-label="Simulation">
+        <button id="pauseBtn" class="icon" title="Pause / resume">⏸</button>
+        <select id="speed" title="Simulation speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option></select>
+        <select id="quality" title="Graphics quality. Drops a level automatically below 30 fps."><option value="ultra">Ultra</option><option value="high">High</option><option value="low">Low</option></select>
+        <button id="resetBtn" title="Reset the field and the robot">Reset</button>
+        <button id="keysBtn" title="Keyboard controls" aria-expanded="false" aria-controls="keys">Keys</button>
+        <button id="soundBtn" title="Field sounds: start, end of auto, teleop bells, 1:00 chime, 0:20 whistle, end buzzer" aria-pressed="true">Sound</button>
+      </div>
+      <div class="seg" role="group" aria-label="Run record">
+        <button id="trailBtn" class="on" title="Show the path driven this run">Path</button>
+        <button id="replayBtn" title="Scrub through the last run">Replay</button>
+        <button id="csvBtn" title="Download this run as CSV: pose, motors, battery, telemetry numbers">CSV</button>
+      </div>
+    </div>
+  </section>
+
+  <aside id="side" class="side">
+    <!-- DRIVER STATION -->
+    <div class="panel" id="p-ds">
+      <section class="block">
+        <h2>Match</h2>
+        <div class="grid2">
+          <label>Mode <select id="matchMode"><option value="free">Free practice</option><option value="match">Full match (0:30 + 0:08 + 2:00)</option></select></label>
+          <label>Alliance <select id="alliance"><option value="red">Red</option><option value="blue">Blue</option></select></label>
+          <label>Start position <select id="startPose"></select></label>
+          <label>Second robot <select id="otherRobot"><option value="none">None</option><option value="partner">Partner (gamepad2)</option><option value="opponent">Opponent (gamepad2)</option></select></label>
+        </div>
+        <div class="row hidden" id="customPoseRow">
+          <label>X, in <input type="number" id="cpX" step="0.5"></label>
+          <label>Y, in <input type="number" id="cpY" step="0.5"></label>
+          <label>Heading, ° <input type="number" id="cpH" step="5"></label>
+          <button id="cpPick" title="First click: where the robot stands. Second click: where it faces.">Pick on field</button>
+        </div>
+      </section>
+
+      <section class="block ds">
+        <h2>OpMode</h2>
+        <select id="opmode" class="opmode"><option value="">Build your code in the Code tab</option></select>
+        <div class="dsbtns">
+          <button id="initBtn" class="ds-init">Init</button>
+          <button id="startBtn" class="ds-start" disabled>Start</button>
+          <button id="stopBtn" class="ds-stop" disabled>Stop</button>
+        </div>
+        <p id="opState" class="status">No OpMode running</p>
+        <div id="errBox" class="err hidden"></div>
+        <div id="nameCheck" class="namecheck hidden" aria-live="polite"></div>
+      </section>
+
+      <section class="block">
+        <h2>Telemetry</h2>
+        <pre id="tele" class="tele"></pre>
+        <details id="graphBox"><summary>Graph</summary><div id="teleSeries" class="series"></div><canvas id="teleGraph" width="400" height="140"></canvas></details>
+        <details><summary>Log</summary><pre id="log" class="log"></pre></details>
+      </section>
+
+      <section class="block">
+        <h2>NECTAR</h2>
+        <div class="row">
+          <button id="hpRed" class="chip red" title="Human player adds a red NECTAR">+ Red</button>
+          <button id="hpBlue" class="chip blue" title="Human player adds a blue NECTAR">+ Blue</button>
+        </div>
+        <label class="check"><input type="checkbox" id="hpAuto" checked> Auto</label>
+      </section>
+    </div>
+
+    <!-- CODE -->
+    <div class="panel hidden" id="p-code">
+      <div id="fileTabs" class="filetabs"></div>
+      <div class="row toolbar-row">
+        <button id="newFile">New</button>
+        <label class="btn">Upload<input type="file" id="upJava" accept=".java" multiple hidden></label>
+        <button id="loadExamples">Examples</button>
+        <button id="delFile">Delete</button>
+        <button id="saveFiles">Download</button>
+        <span class="grow"></span>
+        <button id="buildBtn" class="primary" title="Ctrl+S">Build</button>
+        <span class="codeds" role="group" aria-label="Run the selected OpMode"><span id="codeOp" class="small"></span><button id="cInit" class="ds-init">Init</button><button id="cStart" class="ds-start">Start</button><button id="cStop" class="ds-stop">Stop</button></span>
+      </div>
+      <div class="editor"><pre id="gutter"></pre><div class="codewrap"><pre id="hl" aria-hidden="true"></pre><textarea id="src" spellcheck="false" wrap="off" aria-label="Java source"></textarea></div></div>
+      <div id="diag" class="diag"></div>
+    </div>
+
+    <div class="panel hidden" id="p-bench">
+      <nav class="subnav" id="benchNav" aria-label="Test">
+        <button data-b="shooter" class="on" title="Shoots preloaded POLLEN at the HIVE: RPM drop, recovery, exit speed, hit or miss">Shooter</button><button data-b="intake" title="Drives into a line of POLLEN and times every pickup">Intake</button><button data-b="drive" title="Top speed, acceleration, sliding after brake">Drivetrain</button><button data-b="joint" title="Travel time, holding at zero power, current">Lift / arm</button><button data-b="auto" title="Your autonomous many times with random conditions">Auto ×N</button>
+      </nav>
+      <div id="benchBody"></div>
+      <div id="p-random" class="hidden"></div>
+    </div>
+    <div class="panel hidden" id="p-robot">
+      <nav class="subnav" id="robotNav" aria-label="Robot">
+        <button data-r="robotSetup" class="on">Setup</button><button data-r="p-calib">Calibration</button>
+      </nav>
+      <div id="robotSetup"></div>
+      <div id="p-calib" class="hidden"></div>
+    </div>
+    <div class="panel hidden" id="p-settings">
+      <section class="block">
+        <h2>Display</h2>
+        <div class="grid2">
+          <label>Graphics <select id="setQuality"><option value="ultra">Ultra</option><option value="high">High</option><option value="low">Low</option></select></label>
+          <label>Sound <select id="setSound"><option value="on">On</option><option value="off">Off</option></select></label>
+        </div>
+      </section>
+      <section class="block">
+        <h2>Gamepads</h2>
+        <div class="grid2">
+          <label>gamepad1 <select id="g1"><option value="auto">Auto (pad or keyboard)</option><option value="keyboard">Keyboard</option><option value="pad0">Gamepad #1</option><option value="pad1">Gamepad #2</option><option value="none">None</option></select></label>
+          <label>gamepad2 <select id="g2"><option value="auto">Auto</option><option value="keyboard">Keyboard</option><option value="pad0">Gamepad #1</option><option value="pad1">Gamepad #2</option><option value="none">None</option></select></label>
+        </div>
+        <p id="padInfo" class="hint"></p>
+        <label class="check"><input type="checkbox" id="manualDrive" checked> Drive without OpMode</label>
+      </section>
+
+      <section class="block">
+        <h2 title="Applies to every run. Auto ×N randomizes some of these on top.">Sensor noise</h2>
+        <div class="row"><button id="noiseReset">Realistic</button><button id="noiseOff">Perfect sensors</button></div>
+        <details><summary>Edit values</summary><div class="grid2" id="noiseForm"></div></details>
+      </section>
+      <section class="block">
+        <h2 title="Code, robot and calibration are kept in this browser">Saved data</h2>
+        <div class="row"><button id="clearCalib">Forget calibration</button><button id="clearAll">Reset everything</button></div>
+      </section>
+    </div>
+    <div class="panel hidden" id="p-help"></div>
+  </aside>
+</main>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
