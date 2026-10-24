@@ -16,7 +16,8 @@ const ITEMS = [
 export function initMenu(app, { switchTab, game }) {
   const el = document.getElementById('menu');
   let idx = 0, prevPad = {};
-  let team = ''; try { team = localStorage.getItem('ftcsim.team') || ''; } catch { }
+  // asked on every launch; the last number is pre-filled so Enter is enough
+  let team = '', saved = ''; try { saved = localStorage.getItem('ftcsim.team') || ''; } catch { }
   el.innerHTML = `
     <div class="menu-side">
       <h1 class="menu-title">BIOBUZZ<small>FTC 2026-27 simulator</small></h1>

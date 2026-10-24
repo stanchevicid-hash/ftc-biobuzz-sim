@@ -289,7 +289,7 @@ export function buildFieldVisual(THREE, scene, F) {
   const poly = clearPoly(), alu = new THREE.MeshStandardMaterial({ color: 0xd3d6d9, metalness: 1, roughness: 0.32 });
   for (const [x, y, sx, sy] of [[W + IN / 2, 0, IN, 2 * W + 2 * IN], [-W - IN / 2, 0, IN, 2 * W + 2 * IN], [0, W + IN / 2, 2 * W, IN], [0, -W - IN / 2, 2 * W, IN]]) {
     const p = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, WALL_H), poly); p.position.set(x, y, WALL_H / 2); scene.add(p);
-    const r = new THREE.Mesh(new THREE.BoxGeometry(sx * 1.6, sy + 0.01, 1.2 * IN), alu); r.position.set(x, y, WALL_H); scene.add(r);
+    const r = new THREE.Mesh(new THREE.BoxGeometry(sx + 0.6 * IN, sy + 0.6 * IN, 1.2 * IN), alu); r.position.set(x, y, WALL_H); scene.add(r);
   }
   // HIVE frame
   const frameMat = new THREE.MeshStandardMaterial({ color: 0xc4c8cc, metalness: 1, roughness: 0.3 });
