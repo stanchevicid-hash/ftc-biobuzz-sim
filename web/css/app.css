@@ -469,3 +469,19 @@ input[type=number], input[type=text] { min-height: 36px; }
 @media (prefers-reduced-motion: reduce) {
   .mission, .panel:not(.hidden), .game-result, .check input[type=checkbox], .chk input[type=checkbox], .check input::before, .chk input::before { animation: none !important; transition: none !important; }
 }
+g.port.hover rect:first-child { fill: rgba(242, 169, 0, .25); }
+.lab-devs .dev[draggable] { cursor: grab; }
+
+/* mission complete */
+.win { position: absolute; inset: 0; z-index: 9; display: grid; place-content: center; justify-items: center; gap: 6px; pointer-events: none; transition: opacity .45s; }
+.win.out { opacity: 0; }
+.win .burst { position: absolute; left: 50%; top: 50%; width: 520px; height: 520px; margin: -260px 0 0 -260px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(242, 169, 0, .45) 0%, rgba(242, 169, 0, .12) 40%, transparent 70%); animation: burst .9s ease-out both; }
+.win b { position: relative; display: flex; gap: 10px; font-size: clamp(56px, 10vw, 96px); line-height: 1; }
+.win b span { color: rgba(255, 255, 255, .25); text-shadow: 0 4px 24px rgba(0, 0, 0, .5); animation: star-in .45s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: var(--d); }
+.win b span.on { color: var(--honey); }
+.win em { position: relative; font: 700 32px var(--display); font-style: normal; color: #fff; text-shadow: 0 2px 16px rgba(0, 0, 0, .6); text-align: center; }
+.win small { display: block; font: 600 15px var(--display); color: var(--honey); }
+@keyframes burst { from { transform: scale(.3); opacity: 0; } 40% { opacity: 1; } to { transform: scale(1); opacity: .9; } }
+@keyframes star-in { from { transform: scale(0) rotate(-30deg); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .win .burst, .win b span { animation: none; } }

@@ -43,7 +43,7 @@ export function initLab(app, el) {
       <div class="row"><button id="lbAuto" class="primary" title="Plug everything into sensible ports and name it like the robot's devices">Auto-wire</button>
         <button id="lbClear">Unplug all</button>
         <label class="chk" title="RS-485 cable between Control Hub and Expansion Hub"><input type="checkbox" id="lbExp" ${W?.expansion ? 'checked' : ''}> Expansion Hub</label></div>
-      <div class="lab-devs">${devs.map(d => `<button class="dev ${where[d.id] ? 'in' : ''} ${selected === d.id ? 'sel' : ''}" data-id="${esc(d.id)}" style="--k:${KIND_COLOR[d.port]}" title="${esc(d.type)}${where[d.id] ? ' in ' + esc(where[d.id]) : ''}">${esc(d.id)}</button>`).join('')}</div>
+      <div class="lab-devs">${devs.map(d => `<button draggable="true" class="dev ${where[d.id] ? 'in' : ''} ${selected === d.id ? 'sel' : ''}" data-id="${esc(d.id)}" style="--k:${KIND_COLOR[d.port]}" title="${esc(d.type)}${where[d.id] ? ' in ' + esc(where[d.id]) : ''}">${esc(d.id)}</button>`).join('')}</div>
       <div class="lab-hubs">${hubSvg('CH', cfg)}${hubSvg('EH', cfg)}</div>
       <div id="lbMenu" class="lab-menu hidden"></div>
       <h3 class="lab-h">Robot Doctor</h3>
@@ -53,11 +53,24 @@ export function initLab(app, el) {
     $('#lbAuto').onclick = () => commit({ ...cfgCopy(), ...autoWire(app.robotCfg) });
     $('#lbClear').onclick = () => { const c = ensure(cfgCopy()); c.wiring.ports = {}; c.wiring.swapped = {}; commit(c); };
     $('#lbExp').onchange = () => { const c = ensure(cfgCopy()); c.wiring.expansion = $('#lbExp').checked; commit(c); };
-    el.querySelectorAll('.dev').forEach(b => b.onclick = () => { selected = selected === b.dataset.id ? null : b.dataset.id; menuFor = null; render(); });
+    el.querySelectorAll('.dev').forEach(b => {
+      b.onclick = () => { selected = selected === b.dataset.id ? null : b.dataset.id; menuFor = null; render(); };
+      // drag a cable onto a port; ports it fits light up while dragging
+      b.ondragstart = (e) => { e.dataTransfer.setData('text/plain', b.dataset.id); e.dataTransfer.effectAllowed = 'link'; dragging = b.dataset.id; markTargets(); };
+      b.ondragend = () => { dragging = null; markTargets(); };
+    });
     el.querySelectorAll('.lab-doc li').forEach(li => li.onclick = () => li.classList.toggle('open'));
-    el.querySelectorAll('g.port').forEach(g => { g.onclick = () => portClick(g.dataset.k); g.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); portClick(g.dataset.k); } }; });
+    el.querySelectorAll('g.port').forEach(g => {
+      g.ondragover = (e) => { if (dragging && targetOk(dragging, g.dataset.k)) { e.preventDefault(); g.classList.add('hover'); } };
+      g.ondragleave = () => g.classList.remove('hover');
+      g.ondrop = (e) => { e.preventDefault(); const id = e.dataTransfer.getData('text/plain') || dragging; dragging = null; if (id) { selected = id; portClick(g.dataset.k); } };
+      g.onclick = () => portClick(g.dataset.k); g.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); portClick(g.dataset.k); } }; });
     if (menuFor) showMenu(menuFor);
   }
+
+  let dragging = null;
+  const targetOk = (id, k) => { const d = physicalDevices(app.robotCfg).find(x => x.id === id); return d && k !== 'CH:i2c:0' && fits(d, parseKey(k).kind); };
+  const markTargets = () => el.querySelectorAll('g.port').forEach(g => g.classList.toggle('target', !!dragging && targetOk(dragging, g.dataset.k)));
 
   function portClick(k) {
     const cfg = app.robotCfg, p = parseKey(k);

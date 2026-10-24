@@ -402,6 +402,7 @@ $('saveFiles').onclick = () => { syncEditor(); for (const f of files()) { const 
 const rate = { t: 0, sim: null, x: null };
 function hud() {
   const sim = app.sim; if (!sim) return;
+  if (!app.batch && sim.robot.body.translation().z < -2) { resetSim(); return; }   // knocked off the field: start over
   const S = sim.scorer.breakdown(sim.t);
   $('sRed').textContent = S.red.total; $('sBlue').textContent = S.blue.total;
   const [ph, tm] = phaseText(); $('phase').textContent = ph; $('timer').textContent = tm;
