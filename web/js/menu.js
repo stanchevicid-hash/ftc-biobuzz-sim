@@ -31,13 +31,13 @@ export function initMenu(app, { switchTab, game }) {
   function open() {
     document.body.classList.add('menu-open'); app.menuOpen = true;
     if (app.renderer.showCam) { app.renderer.showCam = false; app.menuHidCam = true; }   // no webcam inset over the menu
-    app.renderer.setMode('free'); app.renderer.controls.autoRotate = true; app.renderer.controls.autoRotateSpeed = 0.5;
+    app.renderer.setMode('free'); app.renderer.controls.autoRotate = true; app.renderer.controls.autoRotateSpeed = 0.5; app.renderer.dof = true;
     requestAnimationFrame(() => { app.renderer.resize(); focus(idx); });
   }
   function close(tab) {
     document.body.classList.remove('menu-open'); app.menuOpen = false;
     if (app.menuHidCam) { app.renderer.showCam = true; app.menuHidCam = false; }
-    app.renderer.controls.autoRotate = false; app.renderer.setMode('free');
+    app.renderer.controls.autoRotate = false; app.renderer.dof = false; app.renderer.setMode('free');
     switchTab(tab);
   }
   function choose(i) {

@@ -375,3 +375,6 @@ body.menu-open #ov { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) { .menu-list button { transition: none; } }
 @media (max-width: 600px) { body.menu-open .menu { background: linear-gradient(180deg, rgba(16, 18, 20, .92) 0%, rgba(16, 18, 20, .75) 60%, rgba(16, 18, 20, .3) 100%); } }
 body.menu-open .viewport { height: 100% !important; flex: 1 !important; }
+/* soft vignette on every quality level (Ultra also grades and adds grain in the shader) */
+.viewport::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .28) 100%); }

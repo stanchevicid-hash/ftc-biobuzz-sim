@@ -56,6 +56,16 @@ export const DEMO_ROBOT = {
   visual: { type: 'demo' },
 };
 
+/** printed top label for the electronics: dark plate, port strip, name */
+function labelTex(THREE, text, bg, fg, ports) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 192; const g = c.getContext('2d');
+  g.fillStyle = bg; g.fillRect(0, 0, 256, 192);
+  if (ports) ['#e0a526', '#e0a526', '#e0a526', '#e0a526', '#4f8fe0', '#4f8fe0', '#4f8fe0', '#57b36a', '#57b36a']
+    .forEach((col, i) => { g.fillStyle = '#111'; g.fillRect(14 + i * 26, 12, 20, 16); g.fillStyle = col; g.fillRect(14 + i * 26, 28, 20, 3); });
+  g.fillStyle = fg; g.font = '700 34px "Barlow Condensed", Arial Narrow, sans-serif'; g.textAlign = 'center'; g.fillText(text, 128, ports ? 120 : 108);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+}
+
 /** goBILDA pattern on a 24 mm grid: a 14 mm hole in the middle of each cell, 4 mm holes on the 8 mm pitch around it (white = metal) */
 let holesTex = null;
 function goBildaHoles(THREE) {
@@ -80,7 +90,8 @@ function worldUV(geo) {
 }
 
 /** Procedural 3D model of the demo robot. Returns { root, links:{id:Group}, update(robot) }. */
-export function buildDemoVisual(THREE, robot) {
+export function buildDemoVisual(THREE, robot, extra = {}) {
+  const Rounded = extra.RoundedBoxGeometry;          // passed in by the renderer, so this file also loads in node tests
   const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, metalness: 0.35, ...o });
   const alu = M(0xd2d5d9, { metalness: 1, roughness: 0.33, alphaMap: goBildaHoles(THREE), alphaTest: 0.5, side: THREE.DoubleSide }), dark = M(0x26282b), yellow = M(0xf2c12e, { metalness: 0.2 }), black = M(0x111111, { roughness: 0.9 });
   const green = M(0x5aa83a), orange = M(0xff7a1a), red = M(0xd32f2f), blue = M(0x1565c0), plate = M(0x8a8f96, { metalness: 0.6 });
@@ -115,9 +126,19 @@ export function buildDemoVisual(THREE, robot) {
     spin.push({ g, w });
   }
   // electronics
-  box(0.11, 0.1, 0.03, M(0x5e6670), 0.08, -0.12, 0.115, root);            // Control Hub
-  box(0.13, 0.07, 0.035, black, -0.08, -0.13, 0.115, root);              // battery
-  box(0.04, 0.04, 0.012, M(0xdddddd), 0.12, 0.1, 0.105, root);           // Pinpoint
+  // electronics: rounded cases with their printed tops
+  const rbox = (w, l, h, mat, x, y, z, r, top) => {
+    const o = new THREE.Mesh(Rounded ? new Rounded(w, l, h, 3, r) : new THREE.BoxGeometry(w, l, h), mat); o.position.set(x, y, z); o.castShadow = true; root.add(o);
+    if (top) { const t = new THREE.Mesh(new THREE.PlaneGeometry(w - 2 * r, l - 2 * r), M(0xffffff, { map: top, roughness: 0.6, metalness: 0 })); t.position.set(x, y, z + h / 2 + 0.0006); root.add(t); }
+    return o;
+  };
+  rbox(0.11, 0.1, 0.03, M(0x2c2f33, { roughness: 0.45, metalness: 0.2 }), 0.08, -0.12, 0.115, 0.004, labelTex(THREE, 'Control Hub', '#2c2f33', '#e8e8e8', true));
+  rbox(0.13, 0.07, 0.035, M(0x141414, { roughness: 0.7 }), -0.08, -0.13, 0.115, 0.006, labelTex(THREE, '12V NiMH', '#141414', '#f2c12e'));
+  rbox(0.04, 0.04, 0.012, M(0x1d5f2c, { roughness: 0.5 }), 0.12, 0.1, 0.105, 0.002);                     // Pinpoint board
+  // power switch and the main power lead from the battery to the hub
+  rbox(0.03, 0.018, 0.012, M(0xd32f2f, { roughness: 0.5 }), -0.005, -0.17, 0.104, 0.003);
+  const lead = new THREE.CatmullRomCurve3([[-0.03, -0.13, 0.135], [0, -0.15, 0.15], [0.03, -0.12, 0.135]].map(v => new THREE.Vector3(...v)));
+  root.add(new THREE.Mesh(new THREE.TubeGeometry(lead, 16, 0.003, 8), M(0xb22222, { roughness: 0.5 })));
   // intake: roller across the front + side plates
   const roller = new THREE.Group(); roller.position.set(0, 0.235, 0.06); root.add(roller);
   const rmesh = cyl(0.03, 0.27, M(0x2f8f5b, { roughness: 0.8 }), 'x', 0, 0, 0, roller);
