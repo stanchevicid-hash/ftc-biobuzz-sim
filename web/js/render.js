@@ -7,6 +7,27 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+import { buildArena } from './arena.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+/** final look in display space: gentle S-curve, a touch more saturation, vignette and fine film grain */
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, time: { value: 0 }, vignette: { value: 0.32 }, grain: { value: 0.035 } },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float time, vignette, grain; varying vec2 vUv;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233)) + time) * 43758.5453); }
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      vec3 col = c.rgb;
+      col = mix(col, col * col * (3.0 - 2.0 * col), 0.28);                    // contrast S-curve
+      float l = dot(col, vec3(0.299, 0.587, 0.114)); col = mix(vec3(l), col, 1.08);  // saturation
+      float d = distance(vUv, vec2(0.5)); col *= 1.0 - vignette * smoothstep(0.35, 0.85, d);
+      col += (hash(vUv * 1000.0) - 0.5) * grain;
+      gl_FragColor = vec4(col, c.a);
+    }`,
+};
 import { buildFieldVisual, qRotate } from './field.js';
 import { buildDemoVisual } from './robots/demo.js';
 import { sensorWorld } from './sensors.js';
@@ -20,8 +41,8 @@ export class Renderer {
     this.r.toneMapping = THREE.ACESFilmicToneMapping; this.r.toneMappingExposure = 0.9;
     THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x16191c);
-    this.scene.fog = new THREE.Fog(0x16191c, 9, 22);
+    this.scene.background = new THREE.Color(0x0c0e10);
+    this.scene.fog = new THREE.Fog(0x0c0e10, 11, 30);
     // image-based light: a studio room reflected in metal, polycarbonate and plastic, like the hall lights at an event
     const pm = new THREE.PMREMGenerator(this.r);
     this.scene.environment = pm.fromScene(new RoomEnvironment(this.r), 0.04).texture; pm.dispose();
@@ -31,6 +52,10 @@ export class Renderer {
     Object.assign(sun.shadow.camera, { left: -2.3, right: 2.3, top: 2.3, bottom: -2.3, near: 1, far: 12 });
     sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.015; sun.shadow.radius = 3; this.scene.add(sun);
     const fill = new THREE.DirectionalLight(0xcfe0ff, 0.6); fill.position.set(3, -2.5, 3.5); this.scene.add(fill);
+    // alliance-coloured rim light from behind each driver station, like an event's side wash
+    const rimR = new THREE.DirectionalLight(0xff6a5a, 0.55); rimR.position.set(0, 6, 1.6); this.scene.add(rimR);
+    const rimB = new THREE.DirectionalLight(0x5a8cff, 0.55); rimB.position.set(0, -6, 1.6); this.scene.add(rimB);
+    this.arena = buildArena(THREE, this.scene);
     this.cam = new THREE.PerspectiveCamera(50, 1, 0.02, 60);
     this.cam.position.set(-3.6, 0, 2.6);
     this.controls = new OrbitControls(this.cam, canvas);
@@ -66,6 +91,8 @@ export class Renderer {
       ao.blendIntensity = 0.9; c.addPass(ao);
       c.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.18, 0.5, 0.92));
       c.addPass(new OutputPass());
+      this.bokeh = new BokehPass(this.scene, this.cam, { focus: 5, aperture: 0.0025, maxblur: 0.008 }); this.bokeh.enabled = false; c.addPass(this.bokeh);
+      this.grade = new ShaderPass(GradeShader); c.addPass(this.grade);
       this.composerSize = '';
     }
   }
@@ -106,7 +133,7 @@ export class Renderer {
   }
 
   buildRobotVisual(robot, model) {
-    if (robot.cfg.visual?.type === 'demo') return buildDemoVisual(THREE, robot);
+    if (robot.cfg.visual?.type === 'demo') return buildDemoVisual(THREE, robot, { RoundedBoxGeometry });
     if (model) return model.build(THREE, robot);
     // fallback: boxes from the colliders, cylinders for the wheels
     const root = new THREE.Group(), links = {}, mat = new THREE.MeshStandardMaterial({ color: 0x8899aa, metalness: 0.3, roughness: 0.6 });
@@ -216,6 +243,8 @@ export class Renderer {
     if (this.composer) {
       const key = W + 'x' + H + '@' + this.r.getPixelRatio();
       if (this.composerSize !== key) { this.composer.setPixelRatio(this.r.getPixelRatio()); this.composer.setSize(W, H); this.composerSize = key; }
+      if (this.grade) this.grade.uniforms.time.value = (performance.now() / 1000) % 100;
+      if (this.bokeh) { this.bokeh.enabled = !!this.dof; if (this.dof) this.bokeh.uniforms.focus.value = this.cam.position.distanceTo(this.controls.target); }
       this.composer.render();
     } else this.r.render(this.scene, this.cam);
     this.watchFps();
