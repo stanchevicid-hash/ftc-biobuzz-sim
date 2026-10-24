@@ -22,7 +22,7 @@ export function codeDeviceNames(files) {
     for (const m of (f.code || '').matchAll(re)) {
       const name = m[2] ?? consts[m[3]] ?? m[5] ?? consts[m[6]], type = m[1] ? CLASS_TYPE[m[1]] : MAP_FIELD[m[4]];
       if (name == null || !type || found.has(name)) continue;   // a variable or a method call is only known when it runs
-      found.set(name, { name, type, javaType: m[1] || m[3], file: f.name, line: f.code.slice(0, m.index).split('\n').length });
+      found.set(name, { name, type, javaType: m[1] || m[4], file: f.name, line: f.code.slice(0, m.index).split('\n').length });
     }
   }
   return [...found.values()];

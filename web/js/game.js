@@ -12,7 +12,6 @@ const save = (r) => { try { localStorage.setItem(LSK, JSON.stringify(r)); } catc
 const fmt = (s) => s == null ? '–' : s.toFixed(1) + ' s';
 const pos = (sim) => sim.robot.body.translation();
 const near = (sim, x, y, r) => { const p = pos(sim); return Math.hypot(p.x - x, p.y - y) < r; };
-const inRect = (sim, [x0, x1, y0, y1]) => { const p = pos(sim); return p.x > x0 && p.x < x1 && p.y > y0 && p.y < y1; };
 const speed = (sim) => { const v = sim.robot.body.linvel(); return Math.hypot(v.x, v.y); };
 const held = (sim) => sim.robot.holders.reduce((n, h) => n + h.balls.length, 0);
 
@@ -28,14 +27,16 @@ const MISSIONS = [
   { id: 'park', name: 'Park', goal: 'Stop inside your LOADING ZONE', limit: 20, needs: 'drive', stars: [5, 8, 12],
     pose: { x: -36 * IN, y: -55 * IN, heading: 90 },
     zone: ZONES.loading.red,
-    check(sim) { return inRect(sim, this.zone) && speed(sim) < 0.05; } },
+    check(sim) { return sim.scorer.inLoadingZone('red') && speed(sim) < 0.05; } },
   { id: 'pickup', name: 'Pickup', goal: 'Collect 4 POLLEN', limit: 45, needs: 'code', stars: [10, 16, 25],
     pose: { x: -54 * IN, y: -30 * IN, heading: 0 }, preload: 0,
     balls: [[-24, -30], [-6, -42], [12, -24], [30, -40], [42, -12]].map(([x, y]) => [x * IN, y * IN]),
     check(sim) { return held(sim) >= 4; } },
   { id: 'shoot', name: 'Score 3', goal: 'Put 3 balls in your upper CELL', limit: 60, needs: 'code', stars: [12, 20, 35],
     pose: { x: -60 * IN, y: 12 * IN, heading: 0 },
-    check(sim, st) { const c = sim.scorer.breakdown(sim.t).red.cell; st.base ??= c; return c - st.base >= 3; } },
+    check(sim, st) {                              // a tip counts too: it means enough balls landed in the CELL
+      const c = sim.scorer.breakdown(sim.t).red.cell, n = sim.field.hives[0].tips.length; st.base ??= c; st.tips ??= n;
+      return c - st.base >= 3 || n > st.tips; } },
   { id: 'tip', name: 'Tip the HIVE', goal: 'Tip your HIVE', limit: 90, needs: 'code', stars: [25, 40, 60],
     pose: { x: -60 * IN, y: 12 * IN, heading: 0 },
     check(sim, st) { const n = sim.field.hives[0].tips.length; st.base ??= n; return n > st.base; } },
@@ -55,41 +56,51 @@ export function initGame(app, el) {
     const L = level(), teleops = (app.opmodes || []).filter(o => o.kind === 'TeleOp');
     el.innerHTML = `
       <div class="game-head"><b>Level ${L.lvl}</b><span>${L.total} / ${MISSIONS.length * 3} ★</span>
-        <label title="Missions with mechanisms run this TeleOp, like practice with your team's code">TeleOp <select id="gmTele">${teleops.map(o => `<option value="${esc(o.cls)}">${esc(o.name)}</option>`).join('') || '<option value="">Build code first</option>'}</select></label></div>
+        <label title="Built-in: C intake, 1 flywheel, E shoot, I/K hood. Or practise with your own TeleOp.">Controls <select id="gmTele"><option value="">Built-in</option>${teleops.map(o => `<option value="${esc(o.cls)}">${esc(o.name)}</option>`).join('')}</select></label></div>
       ${result ? `<div class="game-result ${result.ok ? 'ok' : ''}"><b>${r_title(result)}</b>
         <span>${esc(result.name)}: ${result.points != null ? result.points + ' points' : fmt(result.time)}${result.best ? ', new record' : ''}</span>
         <button id="gmRetry">Again</button></div>` : ''}
       <div class="missions">${MISSIONS.map(m => { const s = starsOf(m, records[m.id]); return `
         <button class="mission ${run?.m === m ? 'on' : ''}" data-m="${m.id}" title="${esc(m.goal)}">
           <b>${esc(m.name)}</b><span class="stars">${'★'.repeat(s)}${'☆'.repeat(3 - s)}</span>
-          <span class="best">${records[m.id] != null ? (m.points ? records[m.id] + ' pts' : fmt(records[m.id])) : esc(m.goal)}</span>${m.needs === 'code' ? '<i title="Uses your TeleOp">code</i>' : ''}</button>`; }).join('')}
+          <span class="best">${records[m.id] != null ? (m.points ? records[m.id] + ' pts' : fmt(records[m.id])) : esc(m.goal)}</span></button>`; }).join('')}
         <button class="mission vs" data-m="bots" title="2:30 match: you and a bot against two bots"><b>Match vs bots</b><span class="best">2 v 2</span></button>
       </div>
-      ${run ? `<div class="game-run"><b id="gmClock">0.0</b><span id="gmGoal">${esc(run.m.goal)}</span><button id="gmQuit">Stop</button></div>` : ''}`;
+      ${run ? `<div class="game-run"><b id="gmClock">0.0</b><span id="gmGoal">${esc(run.m.goal)}${run.useCode || run.bots ? '' : '<span class="gm-keys"><kbd>WASD</kbd> drive <kbd>←→</kbd> turn <kbd>C</kbd> intake <kbd>1</kbd> flywheel <kbd>E</kbd> shoot</span>'}</span><button id="gmQuit">Stop</button></div>` : ''}`;
     el.querySelectorAll('.mission').forEach(b => b.onclick = () => b.dataset.m === 'bots' ? startBots() : start(MISSIONS.find(m => m.id === b.dataset.m)));
     el.querySelector('#gmRetry') && (el.querySelector('#gmRetry').onclick = () => result.m.id === 'bots' ? startBots() : start(result.m));
     el.querySelector('#gmQuit') && (el.querySelector('#gmQuit').onclick = () => finish(false));
     const sel = el.querySelector('#gmTele');
-    if (sel) sel.value = app.gameTele || teleops.find(o => /tele/i.test(o.name))?.cls || sel.value;
+    if (sel) sel.value = app.gameTele ?? '';
     sel && (sel.onchange = () => { app.gameTele = sel.value; });
   }
 
   async function start(m) {
     await finish(false, true);
-    if (m.needs === 'code' && !(app.opmodes || []).some(o => o.kind === 'TeleOp')) { alert('This mission needs a TeleOp. Build your code in the Code tab first.'); return; }
     document.getElementById('matchMode').value = 'free'; app.match.mode = 'free';
     resetSim({ pose: m.pose, alliance: 'red', others: [], preload: m.preload });
     const sim = app.sim;
     for (const [x, y] of m.balls || []) sim.addBall('pollen', 'yellow', [x, y, 0.036]);
-    run = { m, st: { i: 0 }, t0: null, sim };
+    const useCode = m.needs === 'code' && !!el.querySelector('#gmTele')?.value;
+    run = { m, st: { i: 0 }, t0: null, sim, useCode };
     app.renderer.setMarkers(m.gates ? m.gates.map((g, i) => ({ ...g, next: i === 0 })) : m.zone ? [{ rect: m.zone }] : []);
     render();
-    if (m.needs === 'code') {
-      const sel = document.getElementById('opmode'); sel.value = el.querySelector('#gmTele').value || sel.value;
+    if (useCode) {
+      const sel = document.getElementById('opmode'); sel.value = app.gameTele;
       await initOpMode(); await startOpMode();
-    }
+    } else document.getElementById('manualDrive').checked = true;      // built-in controls drive the robot
+    await countdown(run);
+    if (run?.m !== m) return;                       // stopped during the countdown
     cue('charge');
     run.t0 = app.sim.t;
+  }
+
+  async function countdown(r) {
+    const view = document.getElementById('view'), box = document.createElement('div');
+    box.className = 'countdown'; box.setAttribute('aria-live', 'assertive'); view.appendChild(box);
+    const was = app.running; app.running = false;
+    for (const n of ['3', '2', '1']) { if (run !== r) break; box.textContent = n; box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop'); cue('chime'); await new Promise(res => setTimeout(res, 700)); }
+    box.remove(); app.running = was || true;
   }
 
   app.onTick = (sim) => {
@@ -111,7 +122,7 @@ export function initGame(app, el) {
     if (!run) return;
     const r = run; r.done = true; run = null;
     const time = r.t0 != null ? r.sim.t - r.t0 : null;
-    if (r.m.needs === 'code' || r.bots) await stopOpMode();
+    if (r.useCode || r.bots) await stopOpMode();
     app.renderer.setMarkers([]);
     if (silent) return;
     let result = null;
