@@ -15,6 +15,7 @@ import { initBenchTab } from './benchui.js';
 import { initLab } from './lab.js';
 import { initDriverHub } from './driverhub.js';
 import { initGame } from './game.js';
+import { initMenu } from './menu.js';
 import { mechCommands, mechStatus, predictArc } from './manual.js';
 import { DEFAULT_NOISE } from './sensors.js';
 import { missingNames, suggest } from './names.js';
@@ -121,7 +122,7 @@ async function doTick() {
       sim.setCodeCommands(r.out);
       handleStatus(r);
     } catch (e) { setServer(false); app.op.state = 'idle'; showError({ type: 'bridge', message: String(e) }); }
-  } else if ($('manualDrive').checked && app.match.phase !== 'auto') {
+  } else if ($('manualDrive').checked && app.match.phase !== 'auto' && !app.menuOpen) {   // menu keys must not drive the robot
     sim.setCommands(manualCommands(readGamepads()[0]));
   } else sim.setCommands({});
   if (sim.others.length) { const g2 = readGamepads()[1]; for (const o of sim.others) o.applyCommands(o.bot ? o.bot.step(sim, o) : manualCommands(g2, o)); }
@@ -511,6 +512,7 @@ const lab = initLab(app, $('robotWiring'));
 const openWiring = () => { switchTab('robot'); $('robotNav').querySelector('[data-r="robotWiring"]').click(); };
 initDriverHub(app, $, openWiring);
 const game = initGame(app, $('gameBox'));
+initMenu(app, { switchTab, game });
 initSettings();
 $('robotNav').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; $('robotNav').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); for (const id of ['robotSetup', 'robotWiring', 'p-calib']) $(id).classList.toggle('hidden', id !== b.dataset.r); if (b.dataset.r === 'robotWiring') lab.render(); };
 setServer(await bridge.online());
