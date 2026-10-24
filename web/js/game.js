@@ -4,6 +4,10 @@ import { DEMO_ROBOT } from './robots/demo.js';
 import { resetSim, stopOpMode, initOpMode, startOpMode } from './main.js';
 import { Bot } from './bots.js';
 import { cue } from './sounds.js';
+import { ICON } from './icons.js';
+
+const MISSION_ICON = { slalom: 'gate', park: 'park', pickup: 'ball', shoot: 'cell', tip: 'tip', teleop: 'clock' };
+const pips = (n) => '<span class="pips" aria-label="' + n + ' of 3 stars">' + [0, 1, 2].map(i => '<i class="' + (i < n ? 'on' : '') + '"></i>').join('') + '</span>';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const LSK = 'ftcsim.records';
@@ -55,16 +59,16 @@ export function initGame(app, el) {
   function render(result) {
     const L = level(), teleops = (app.opmodes || []).filter(o => o.kind === 'TeleOp');
     el.innerHTML = `
-      <div class="game-head"><b>Level ${L.lvl}</b><span>${L.total} / ${MISSIONS.length * 3} ★</span>
+      <div class="game-head"><div class="lvl"><b>Level ${L.lvl}</b><span>${L.total} / ${MISSIONS.length * 3}</span><i class="lvl-bar"><i style="width:${(L.total % 3) / 3 * 100}%"></i></i></div>
         <label title="Built-in: C intake, 1 flywheel, E shoot, I/K hood. Or practise with your own TeleOp.">Controls <select id="gmTele"><option value="">Built-in</option>${teleops.map(o => `<option value="${esc(o.cls)}">${esc(o.name)}</option>`).join('')}</select></label></div>
       ${result ? `<div class="game-result ${result.ok ? 'ok' : ''}"><b>${r_title(result)}</b>
         <span>${esc(result.name)}: ${result.points != null ? result.points + ' points' : fmt(result.time)}${result.best ? ', new record' : ''}</span>
         <button id="gmRetry">Again</button></div>` : ''}
       <div class="missions">${MISSIONS.map(m => { const s = starsOf(m, records[m.id]); return `
         <button class="mission ${run?.m === m ? 'on' : ''}" data-m="${m.id}" title="${esc(m.goal)}">
-          <b>${esc(m.name)}</b><span class="stars">${'★'.repeat(s)}${'☆'.repeat(3 - s)}</span>
+          ${ICON[MISSION_ICON[m.id]] || ''}<b>${esc(m.name)}</b>${pips(s)}
           <span class="best">${records[m.id] != null ? (m.points ? records[m.id] + ' pts' : fmt(records[m.id])) : esc(m.goal)}</span></button>`; }).join('')}
-        <button class="mission vs" data-m="bots" title="2:30 match: you and a bot against two bots"><b>Match vs bots</b><span class="best">2 v 2</span></button>
+        <button class="mission vs" data-m="bots" title="2:30 match: you and a bot against two bots">${ICON.versus}<b>Match vs bots</b><span class="best">You and a bot against two bots, 2:30${records.botWins ? ', ' + records.botWins + ' won' : ''}</span></button>
       </div>
       ${run ? `<div class="game-run"><b id="gmClock">0.0</b><span id="gmGoal">${esc(run.m.goal)}${run.useCode || run.bots ? '' : '<span class="gm-keys"><kbd>WASD</kbd> drive <kbd>←→</kbd> turn <kbd>C</kbd> intake <kbd>1</kbd> flywheel <kbd>E</kbd> shoot</span>'}</span><button id="gmQuit">Stop</button></div>` : ''}`;
     el.querySelectorAll('.mission').forEach(b => b.onclick = () => b.dataset.m === 'bots' ? startBots() : start(MISSIONS.find(m => m.id === b.dataset.m)));

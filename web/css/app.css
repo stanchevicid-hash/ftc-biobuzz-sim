@@ -6,13 +6,14 @@
   --raised-2: #454c53;
   --line: #4a5158;
   --text: #eef0ec;
-  --dim: #a9b0ad;
-  --faint: #7d8582;
+  --dim: #b6bdba;
+  --faint: #949c99;
   --honey: #f2a900;
   --honey-ink: #2b1d00;
   --red: #d8433a;
   --blue: #2c6cd4;
   --go: #3f9b4a;
+  --asa: #ff4fa3;         /* ASA team pink: the Made by ASA badge and the team number only */
   --font: 'Barlow', 'Segoe UI', system-ui, sans-serif;
   --display: 'Barlow Condensed', 'Barlow', 'Arial Narrow', sans-serif;
   --mono: 'JetBrains Mono', Consolas, monospace;
@@ -100,7 +101,7 @@ h2 { font: 600 18px/1.2 var(--display); letter-spacing: .2px; margin: 0 0 10px; 
 label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--dim); }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
 .row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin: 8px 0; }
-.row label input { width: 84px; }
+.row label input:not([type=checkbox]):not([type=radio]) { width: 84px; }
 select, input[type=number], input[type=text], textarea { background: var(--raised); border: 1px solid transparent; border-radius: var(--r); padding: 7px 9px; color: var(--text); min-width: 0; }
 select:hover, input:hover { border-color: var(--line); }
 button, .btn, .filebtn { background: var(--raised); border: 1px solid transparent; border-radius: var(--r); padding: 7px 12px; cursor: pointer; font-weight: 500; color: var(--text);
@@ -399,3 +400,72 @@ body.menu-open .viewport { height: 100% !important; flex: 1 !important; }
 .menu-social svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .menu-social svg .fill { fill: currentColor; stroke: none; }
 .menu-foot #menuTeamBtn { background: none; padding: 4px 0; color: var(--dim); }
+.custom-match { margin-top: 14px; border-top: 1px solid var(--line); }
+.custom-match > summary { padding: 12px 0 2px; font: 600 16px var(--display); color: var(--dim); }
+.custom-match[open] > summary { color: var(--text); }
+
+/* ===================== design pass 2: one control kit, icons, cards, hardware frames ===================== */
+.tabs button { font-size: 14.5px; }
+.bridge { font-size: 0; gap: 0; }                         /* status is the LED; the text is in its tooltip */
+
+/* controls */
+select { appearance: none; -webkit-appearance: none; padding-right: 30px; min-height: 36px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23b6bdba' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 11px 8px; }
+input[type=number], input[type=text] { min-height: 36px; }
+.dock select { min-height: 30px; padding-right: 26px; background-position: right 8px center; }
+.check input[type=checkbox], .chk input[type=checkbox], .lab-hubs input[type=checkbox] {
+  appearance: none; -webkit-appearance: none; width: 34px !important; height: 20px !important; border-radius: 10px; background: #4a5158; position: relative; flex: none; cursor: pointer; margin: 0; transition: background .15s; }
+.check input[type=checkbox]::before, .chk input[type=checkbox]::before { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #e9ece8; transition: transform .15s; }
+.check input[type=checkbox]:checked, .chk input[type=checkbox]:checked { background: var(--honey); }
+.check input[type=checkbox]:checked::before, .chk input[type=checkbox]:checked::before { transform: translateX(14px); background: #fff; }
+
+/* icons */
+.ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.ico .fill { fill: currentColor; stroke: none; }
+.dock button.icon { padding: 5px 7px; }
+
+/* Drive: level, mission cards, bot match banner */
+.lvl { display: flex; flex-direction: column; gap: 5px; margin-right: auto; }
+.lvl b { font: 700 24px/1 var(--display); }
+.lvl span { color: var(--honey); font: 600 13px var(--display); }
+.lvl-bar { display: block; width: 160px; height: 4px; border-radius: 2px; background: #3a3f46; overflow: hidden; }
+.lvl-bar i { display: block; height: 100%; background: var(--honey); }
+.mission { transition: transform .14s, box-shadow .14s; }
+.mission .ico { width: 24px; height: 24px; color: var(--honey); margin-bottom: 2px; }
+.mission:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, .28); }
+.mission.on { outline: 2px solid var(--honey); box-shadow: 0 0 18px rgba(242, 169, 0, .25); }
+.pips { display: flex; gap: 4px; }
+.pips i { display: block; width: 11px; height: 12px; background: #3a3f46; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+.pips i.on { background: var(--honey); }
+.mission.vs { grid-column: 1 / -1; min-height: 64px; display: flex; align-items: center; gap: 12px; box-shadow: none;
+  background: linear-gradient(90deg, rgba(216, 67, 58, .30), rgba(59, 65, 71, 1) 38%, rgba(59, 65, 71, 1) 62%, rgba(44, 108, 212, .30)); }
+.mission.vs .ico { color: #fff; }
+.mission.vs .best { margin-left: auto; }
+.game-result { animation: pop-in .25s ease-out; }
+@keyframes pop-in { from { transform: scale(.97); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* panels fade in when a tab opens */
+.panel:not(.hidden) { animation: panel-in .16s ease-out; }
+@keyframes panel-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* Driver Hub framed like the tablet it is */
+.dh { max-width: 720px; margin: 16px auto 0; border: 8px solid #15181b; border-radius: 24px; padding: 12px 16px 16px; background: #0b0d0f; box-shadow: 0 12px 30px rgba(0, 0, 0, .35); }
+.dh .tele { background: #0b0d0f; border-color: #22262a; }
+
+/* Tests: result tiles, a proper Run button */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 12px 0; }
+.tiles div { background: #23272b; border: 1px solid #2f3439; padding: 10px 12px; }
+.tiles b { display: block; font: 700 26px/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.tiles span { color: var(--dim); font-size: 12.5px; }
+#bRun { min-height: 40px; padding: 0 22px; font-size: 15px; }
+
+/* start screen: the team number pill */
+.menu-team div { position: relative; max-width: 340px; height: 56px; padding: 5px; border: 1px solid var(--line); border-radius: 28px; background: rgba(255, 255, 255, .06); }
+.menu-team div:focus-within { border-color: var(--honey); }
+.menu-team input { border: 0 !important; background: transparent !important; font: 700 28px var(--mono) !important; letter-spacing: .06em; padding: 0 16px !important; caret-color: var(--asa); min-height: 0; }
+.menu-team button { border-radius: 23px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mission, .panel:not(.hidden), .game-result, .check input[type=checkbox], .chk input[type=checkbox], .check input::before, .chk input::before { animation: none !important; transition: none !important; }
+}

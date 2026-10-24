@@ -77,7 +77,9 @@ export function initBenchTab(app, el, randomEl) {
     lastTrace = { pts: r.trace, target: r.targetWheel, marks: r.rows.map(x => x.t), unit: 'wheel RPM' };
     const hits = r.rows.filter(x => x.hit).length, drop = r.rows.map(x => x.rpmBefore - x.rpmAfter);
     const verdict = hits === r.rows.length ? 'okc' : hits ? 'warnc' : 'badc';
-    return `<p class="bench-sum"><b class="${verdict}">${hits} of ${r.rows.length} in the CELL</b> from ${r.distIn} in.
+    const avgDrop = drop.reduce((a, b) => a + b, 0) / (drop.length || 1);
+    return `<div class="tiles"><div><b class="${verdict}">${hits}/${r.rows.length}</b><span>in the CELL</span></div><div><b>${f(r.spinUp, 2)} s</b><span>spin-up</span></div><div><b>${f(avgDrop, 0)}</b><span>RPM lost per shot</span></div><div><b>${f(Math.max(...r.rows.map(x => x.exit)), 1)} m/s</b><span>exit speed</span></div></div>
+      <p class="bench-sum"><b class="${verdict}">${hits} of ${r.rows.length} in the CELL</b> from ${r.distIn} in.
       Spin-up ${f(r.spinUp, 2)} s, each shot costs about ${f(drop.reduce((a, b) => a + b, 0) / (drop.length || 1), 0)} RPM.${r.tips ? ' The HIVE tipped.' : ''}</p>
       <table class="t"><tr><th>#</th><th>Time, s</th><th>RPM before → after</th><th>Back in 2 %, s</th><th>Exit, m/s</th><th>Highest, in</th><th>Result</th></tr>
       ${r.rows.map(x => `<tr><td>${x.n}</td><td>${f(x.t, 2)}</td><td>${f(x.rpmBefore, 0)} → ${f(x.rpmAfter, 0)}</td><td>${f(x.recover, 2)}</td><td>${f(x.exit, 2)}</td><td>${f(x.apex / IN, 0)}</td>
