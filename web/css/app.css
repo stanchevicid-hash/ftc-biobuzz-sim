@@ -279,3 +279,69 @@ kbd { display: inline-block; min-width: 22px; padding: 1px 5px; margin: 0 1px; t
 canvas.trace { width: 100%; height: auto; display: block; margin-top: 10px; border: 1px solid #14171a; }
 table.sweep td { text-align: center; font-variant-numeric: tabular-nums; }
 .sweepopts { margin-top: 6px; }
+
+/* Robot > Wiring */
+.lab-devs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.lab-devs .dev { box-shadow: inset 3px 0 0 var(--k); padding: 5px 10px; font: 13px var(--mono); }
+.lab-devs .dev.in { opacity: .55; } .lab-devs .dev.sel { background: var(--honey); color: var(--honey-ink); opacity: 1; }
+.lab-hubs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+svg.hub { width: 100%; height: auto; display: block; }
+svg.hub.off { opacity: .4; }
+.hub-body { fill: #1b1e21; stroke: #4a5158; }
+.hub-name { fill: var(--text); font: 600 14px var(--display); }
+.hub-lbl { fill: var(--faint); font: 600 10px var(--display); letter-spacing: .5px; }
+g.port { cursor: pointer; } g.port rect:first-child { fill: #2a2e33; stroke: #4a5158; }
+g.port text { fill: var(--dim); font: 10px var(--mono); pointer-events: none; }
+g.port.used rect:first-child { fill: #3b4147; } g.port.used text { fill: var(--text); }
+g.port.target rect:first-child { stroke: var(--honey); stroke-width: 2; }
+g.port.wrong rect:first-child { stroke: var(--red); stroke-width: 2; }
+g.port.open rect:first-child, g.port:hover rect:first-child, g.port:focus-visible rect:first-child { stroke: var(--text); }
+g.port:focus { outline: none; }
+.lab-menu { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 10px; background: var(--raised); border-radius: var(--r); }
+.lab-h { font: 600 18px/1.2 var(--display); margin: 16px 0 4px; }
+.lab-doc li.insp-pass, .lab-doc li.insp-info { display: grid !important; }
+
+/* Driver Hub: the Driver Station app */
+.dh { background: #101214; border: 1px solid #2c3135; border-radius: 10px; padding: 10px 12px 14px; margin-top: 14px; color: #e8ebe7; }
+.dh-bar { display: flex; align-items: center; gap: 14px; padding-bottom: 8px; border-bottom: 1px solid #2c3135; font: 13px var(--mono); color: var(--dim); }
+.dh-bar b { font: 600 15px var(--display); color: var(--text); margin-right: auto; }
+.dh-bar .low { color: #ff9d95; }
+.dh-pads { display: flex; gap: 4px; } .dh-pads i { font-style: normal; padding: 1px 5px; border: 1px solid #3a4045; border-radius: 3px; font-size: 11px; }
+.dh-pads i.on { background: var(--go); border-color: var(--go); color: #fff; }
+.dh-menu { background: none; padding: 2px 8px; font-size: 18px; }
+.dh-pick { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; margin: 12px 0; }
+.dh-list { font: 600 13px var(--display); white-space: nowrap; } .dh-list.on { background: var(--raised-2); }
+.dh-op { font-size: 15px; padding: 9px; }
+.dh-run { display: flex; align-items: center; justify-content: center; gap: 22px; margin: 6px 0 4px; }
+.dh .dsbtns { display: flex; gap: 14px; margin: 0; }
+.dh .dsbtns button { width: 96px; height: 96px; border-radius: 50%; font: 700 20px var(--display); justify-content: center; padding: 0; }
+.dh .dsbtns button:disabled { display: none; }
+.dh .dsbtns .ds-stop { width: 56px; height: 56px; align-self: center; font-size: 15px; }
+.dh-time { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+#dhTimer { font: 700 30px var(--display); font-variant-numeric: tabular-nums; }
+.dh-tele { margin-top: 10px; }
+.dh .tele { background: #000; border-color: #2c3135; color: #e6e6e6; min-height: 150px; }
+.dh-cfg-head { display: flex; align-items: center; gap: 10px; margin: 10px 0; } .dh-cfg-head b { font: 600 17px var(--display); margin-right: auto; }
+.dh-hub > summary { font: 600 15px var(--display); color: var(--text); margin: 8px 0; }
+.dh-grp { margin: 4px 0 4px 10px; } .dh-grp summary { font-size: 13.5px; }
+.dh-grp td:first-child { width: 22px; color: var(--faint); } .dh-grp input, .dh-grp select { width: 100%; }
+
+/* Drive: missions and match vs bots */
+.game-head { display: flex; align-items: flex-end; gap: 14px; margin: 14px 0 10px; }
+.game-head b { font: 700 22px/1 var(--display); }
+.game-head > span { color: var(--honey); font: 600 15px var(--display); margin-right: auto; }
+.game-head label { min-width: 160px; }
+.missions { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.mission { display: grid; grid-template-rows: auto auto auto; justify-items: start; gap: 3px; padding: 10px 12px; text-align: left; position: relative; min-height: 78px; }
+.mission b { font: 600 16px var(--display); }
+.mission .stars { color: var(--honey); letter-spacing: 1px; }
+.mission .best { font-size: 12px; color: var(--dim); }
+.mission i { position: absolute; top: 8px; right: 8px; font: 10px var(--mono); font-style: normal; color: var(--faint); }
+.mission.on { outline: 2px solid var(--honey); }
+.mission.vs { box-shadow: inset 3px 0 0 var(--red), inset -3px 0 0 var(--blue); }
+.game-run { display: flex; align-items: center; gap: 12px; margin: 12px 0; padding: 10px 12px; background: #1b1e21; border: 1px solid var(--line); }
+.game-run b { font: 700 32px/1 var(--display); font-variant-numeric: tabular-nums; min-width: 90px; }
+.game-run span { color: var(--dim); margin-right: auto; }
+.game-result { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; padding: 10px 12px; background: var(--raised); }
+.game-result b { font: 700 22px var(--display); color: var(--faint); } .game-result.ok b { color: var(--honey); }
+.game-result span { margin-right: auto; }

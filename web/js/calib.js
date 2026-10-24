@@ -216,7 +216,7 @@ export function initRandomTab(app, el) {
         const tEnd = sim.t + AUTO_S;
         while (sim.t < tEnd && !stop) {
           const resp = await bridge.sync(sim.t, sim.readSensors(), [{}, {}], 60);
-          sim.setCommands(resp.out); sim.tick(); app.tagView = null;
+          sim.setCodeCommands(resp.out); sim.tick(); app.tagView = null;
           if (resp.state === 'error') { err = resp.error?.message || 'error'; break; }
         }
         await bridge.stop();

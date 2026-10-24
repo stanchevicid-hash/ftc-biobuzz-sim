@@ -1,7 +1,8 @@
 // Simulation core: Rapier world + BIOBUZZ field + robot + game pieces. No rendering here (used headless for batch runs).
 import { buildFieldPhysics, stepHives, initialBalls, GROUP, groups, POLLEN_R, NECTAR_R, POLLEN_MASS, NECTAR_MASS, ZONES, IN, FIELD_HALF } from './field.js';
 import { Robot } from './robot.js';
-import { Battery } from './motors.js';
+import { Battery, MOTORS } from './motors.js';
+import { harness, defaultModel } from './wiring.js';
 import { SensorSuite, DEFAULT_NOISE } from './sensors.js';
 import { Scorer } from './scoring.js';
 
@@ -54,6 +55,7 @@ export class Simulation {
     for (const b of initialBalls()) this.addBall(b.type, b.color, b.pos);
     this.robot = new Robot(R, this.world, opts.robotCfg, placeAgainstWall(opts.robotCfg, opts.pose), opts.params || {});
     this.robot.alliance = this.alliance;
+    for (const id of Object.keys(opts.robotCfg.wiring?.swapped || {})) if (this.robot.motors[id]) this.robot.motors[id].swapped = true;   // leads swapped at the hub
     // other robots on the field (alliance partner / opponent), driven from gamepad2 by the UI
     this.others = (opts.others || []).map(o => Object.assign(new Robot(R, this.world, o.cfg, placeAgainstWall(o.cfg, o.pose), opts.params || {}), { alliance: o.alliance }));
     this.sensors = new SensorSuite(this);
@@ -99,25 +101,45 @@ export class Simulation {
     ball.col.setCollisionGroups(groups(GROUP.BALL, 0xffff & ~GROUP.HELD));
   }
 
+  /** code name -> physical device. With a wired robot this goes through the Driver Hub configuration and the hub ports
+   *  (wiring.js); otherwise it is the robot's own names plus any aliases from the name check. */
+  get codeNames() {
+    if (this.harnessCache !== undefined) return this.harnessCache;
+    const h = harness(this.robot.cfg);
+    return (this.harnessCache = h ? { strict: true, entries: h.entries } : { strict: false, entries: Object.entries(this.robot.cfg.aliases || {}).map(([name, physical]) => ({ name, physical })) });
+  }
   /** sensor snapshot as seen by the OpMode (delayed if configured) */
-  /** code name -> robot device name, so a team's own hardwareMap names reach this robot's devices */
-  get aliases() { return this.robot.cfg.aliases || {}; }
   readSensors() {
-    const snap = this.sensors.snapshot(TICK);
-    for (const [alias, real] of Object.entries(this.aliases)) for (const cat of Object.values(snap)) if (cat && typeof cat === 'object' && real in cat) cat[alias] = cat[real];
+    const snap = this.sensors.snapshot(TICK), H = this.codeNames;
+    for (const cat of Object.values(snap)) {
+      if (!cat || typeof cat !== 'object') continue;
+      const orig = { ...cat };                                     // two names may swap devices: read from the untouched copy
+      for (const e of H.entries) if (e.physical != null && e.physical in orig) cat[e.name] = orig[e.physical];
+    }
+    for (const e of H.entries) if (e.kind === 'motor' && e.physical == null) snap.motors[e.name] = { pos: 0, vel: 0, cur: 0 };   // empty port: encoder reads 0
     const d = this.noise.sensorDelayMs / 1000;
     if (d <= 0) return snap;
     this.snapQueue.push({ t: this.t, snap });
     while (this.snapQueue.length > 1 && this.snapQueue[1].t <= this.t - d) this.snapQueue.shift();
     return this.snapQueue[0].snap;
   }
-  /** actuator commands from the OpMode (delayed if configured) */
-  setCommands(out) {
-    const al = Object.entries(this.aliases);
-    if (al.length && out) {
-      out = { ...out };
-      for (const k of ['motors', 'servos', 'crservos']) if (out[k]) { out[k] = { ...out[k] }; for (const [a, r] of al) if (a in out[k]) { out[k][r] = out[k][a]; delete out[k][a]; } }
+  /** commands from the OpMode use code names: send each to the device on that name's port (nothing, if the port is empty) */
+  setCodeCommands(out) {
+    const H = this.codeNames;
+    if (out && (H.strict || H.entries.length)) {
+      const map = Object.fromEntries(H.entries.map(e => [e.name, e.physical]));
+      const t = { ...out };
+      for (const k of ['motors', 'servos', 'crservos']) {
+        if (!out[k]) continue;
+        t[k] = H.strict ? {} : { ...out[k] };
+        for (const [n, c] of Object.entries(out[k])) { if (!(n in map)) continue; if (!H.strict) delete t[k][n]; if (map[n] != null) t[k][map[n]] = c; }
+      }
+      out = t;
     }
+    this.setCommands(out);
+  }
+  /** actuator commands addressed to physical devices (delayed if configured) */
+  setCommands(out) {
     const d = this.noise.actuatorDelayMs / 1000;
     if (d <= 0) { this.robot.applyCommands(out); return; }
     this.cmdQueue.push({ t: this.t, out });
@@ -160,11 +182,21 @@ export class Simulation {
   devices(withAliases = true) {
     const cfg = this.robot.cfg, d = [];
     const motorInfo = (n, model) => { const m = this.robot.motors[n].m; return { name: n, type: 'motor', model, ticksPerRev: m.ticks, maxRPM: m.freeRPM, gearing: m.gearing }; };
+    const H = this.codeNames;
+    if (H.strict) {                                    // exactly what Configure Robot lists, whatever is plugged in behind it
+      for (const e of H.entries) {
+        if (e.kind === 'motor') {
+          if (e.physical && this.robot.motors[e.physical]) { const x = motorInfo(e.physical, this.robot.motors[e.physical].modelId); d.push({ ...x, name: e.name }); }
+          else { const m = MOTORS[defaultModel(cfg.hubConfig[e.key]?.type)] || MOTORS['gobilda-312']; d.push({ name: e.name, type: 'motor', ticksPerRev: m.ticks, maxRPM: m.freeRPM, gearing: m.gearing }); }
+        } else if (e.kind !== 'unknown') d.push({ name: e.name, type: e.kind });
+      }
+      return d;
+    }
     for (const w of cfg.wheels || []) d.push(motorInfo(w.motor, w.model));
     for (const m of cfg.motors || []) d.push(motorInfo(m.name, m.model));
     for (const s of cfg.servos || []) d.push({ name: s.name, type: s.kind === 'crservo' ? 'crservo' : 'servo' });
     for (const s of cfg.sensors || []) d.push({ name: s.name, type: s.type });
-    if (withAliases) for (const [a, r] of Object.entries(this.aliases)) { const x = d.find(e => e.name === r); if (x && !d.some(e => e.name === a)) d.push({ ...x, name: a }); }
+    if (withAliases) for (const { name: a, physical: r } of H.entries) { const x = d.find(e => e.name === r); if (x && !d.some(e => e.name === a)) d.push({ ...x, name: a }); }
     return d;
   }
 
