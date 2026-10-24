@@ -105,6 +105,7 @@ export function initMenu(app, { switchTab, game }) {
   }
   function close(tab) {
     document.body.classList.remove('menu-open'); app.menuOpen = false;
+    dlg.close();   // a hidden modal would still block every click on the page
     if (app.menuHidCam) { app.renderer.showCam = true; app.menuHidCam = false; }
     app.renderer.controls.autoRotate = false; app.renderer.dof = false; app.renderer.setMode('free');
     switchTab(tab);

@@ -406,7 +406,7 @@ body.menu-open .viewport { height: 100% !important; flex: 1 !important; }
 @media (max-width: 900px) { .top-follow span { display: none; } }
 .menu-note { color: var(--faint); font-size: 12px; }
 button.link { background: none; border: 0; padding: 0; min-height: 0; color: var(--dim); text-decoration: underline; font: inherit; cursor: pointer; }
-.menu-dlg { width: min(640px, calc(100vw - 32px)); max-height: min(80vh, 720px); padding: 0; color: var(--text); background: var(--chrome); border: 1px solid var(--line); border-radius: 10px; }
+.menu-dlg { pointer-events: auto; overflow: hidden; width: min(640px, calc(100vw - 32px)); max-height: min(80vh, 720px); padding: 0; color: var(--text); background: var(--chrome); border: 1px solid var(--line); border-radius: 10px; }
 .menu-dlg::backdrop { background: rgba(0, 0, 0, .55); }
 .menu-dlg form { display: flex; flex-direction: column; gap: 14px; padding: 20px 22px; max-height: inherit; box-sizing: border-box; }
 .menu-dlg h2 { margin: 0; font: 700 26px var(--display); }
