@@ -108,6 +108,7 @@ public class SimServer {
             if (p.equals("/api/start")) { Runner.start(); return status(); }
             if (p.equals("/api/stop")) { Runner.stop(); return status(); }
             if (p.equals("/api/examples")) return examples();
+            if (p.equals("/api/teams")) return teams(body);
             if (p.equals("/api/status")) { Map<String, Object> m = status(); m.put("wsPort", wsPort); return m; }
             return null;
         } catch (Throwable e) {
@@ -117,6 +118,22 @@ public class SimServer {
             if (c != e) m.put("cause", c.toString());
             return m;
         }
+    }
+    /** who played: data/teams.json, one row per team + name with a visit count; a body with team and name counts a visit */
+    static synchronized Map<String, Object> teams(Map<String, Object> body) throws IOException {
+        Path f = home.resolve("data/teams.json");
+        List<Object> list = Files.isRegularFile(f) ? Json.arr(Json.parse(new String(Files.readAllBytes(f), StandardCharsets.UTF_8))) : new ArrayList<Object>();
+        String team = Json.str(body.get("team"), ""), name = Json.str(body.get("name"), "").replaceAll("[\\p{Cntrl}<>]", "").trim();
+        if (team.matches("\\d{1,5}") && !name.isEmpty() && name.length() <= 24) {
+            Map<String, Object> hit = null;
+            for (Object o : list) { Map<String, Object> m = Json.obj(o); if (team.equals(m.get("team")) && name.equalsIgnoreCase(Json.str(m.get("name"), ""))) hit = m; }
+            if (hit == null) { hit = new LinkedHashMap<String, Object>(); hit.put("team", team); hit.put("name", name); list.add(hit); }
+            hit.put("visits", (int) Json.num(hit.get("visits"), 0) + 1);
+            hit.put("last", System.currentTimeMillis());
+            Files.createDirectories(f.getParent());
+            Files.write(f, Json.write(list).getBytes(StandardCharsets.UTF_8));
+        }
+        Map<String, Object> r = new LinkedHashMap<String, Object>(); r.put("teams", list); return r;
     }
     static String readBody(HttpExchange x) throws IOException {
         InputStream in = x.getRequestBody(); ByteArrayOutputStream b = new ByteArrayOutputStream();

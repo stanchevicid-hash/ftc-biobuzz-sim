@@ -388,17 +388,37 @@ body.menu-open .viewport { height: 100% !important; flex: 1 !important; }
 .menu-team input:focus { border-color: var(--honey); outline: none; }
 .menu-team button { font: 700 18px var(--display); padding: 0 22px; }
 .menu-foot { flex-wrap: wrap; }
-.menu-asa { display: flex; align-items: center; gap: 10px; color: var(--dim); text-decoration: none; margin-right: 6px; }
-.menu-asa img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; clip-path: circle(41% at 50% 50%); transform: scale(1.18); }
-.menu-asa span { display: flex; flex-direction: column; line-height: 1.15; font-size: 13px; }
-.menu-asa b { color: #fff; font: 700 17px var(--display); letter-spacing: .03em; }
-.menu-asa small { color: var(--faint); font-size: 11.5px; }
+.menu-asa { display: flex; align-items: center; gap: 14px; color: var(--dim); text-decoration: none; margin-right: 10px; }
+.menu-asa img { width: 76px; height: 76px; border-radius: 50%; object-fit: cover; clip-path: circle(41% at 50% 50%); transform: scale(1.18); }
+.menu-asa span { display: flex; flex-direction: column; line-height: 1.1; font-size: 15px; }
+.menu-asa b { color: #fff; font: 700 30px var(--display); letter-spacing: .04em; }
+.menu-asa small { color: var(--faint); font-size: 13px; }
 .menu-asa:hover b { color: #ff4fa3; }
-.menu-social { display: flex; gap: 6px; margin-right: auto; }
-.menu-social a { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); color: var(--dim); }
-.menu-social a:hover, .menu-social a:focus-visible { color: #fff; border-color: #ff4fa3; }
-.menu-social svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
-.menu-social svg .fill { fill: currentColor; stroke: none; }
+.follow { display: flex; align-items: center; gap: 6px; }
+.follow span { color: var(--dim); font: 600 13px var(--display); margin-right: 2px; }
+.menu-social { margin-right: auto; }
+.follow a { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); color: var(--dim); }
+.follow a:hover, .follow a:focus-visible { color: #fff; border-color: #ff4fa3; }
+.follow svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.follow svg .fill { fill: currentColor; stroke: none; }
+.top-follow a { width: 30px; height: 30px; }
+.top-follow svg { width: 16px; height: 16px; }
+@media (max-width: 900px) { .top-follow span { display: none; } }
+.menu-note { color: var(--faint); font-size: 12px; }
+button.link { background: none; border: 0; padding: 0; min-height: 0; color: var(--dim); text-decoration: underline; font: inherit; cursor: pointer; }
+.menu-dlg { width: min(640px, calc(100vw - 32px)); max-height: min(80vh, 720px); padding: 0; color: var(--text); background: var(--chrome); border: 1px solid var(--line); border-radius: 10px; }
+.menu-dlg::backdrop { background: rgba(0, 0, 0, .55); }
+.menu-dlg form { display: flex; flex-direction: column; gap: 14px; padding: 20px 22px; max-height: inherit; box-sizing: border-box; }
+.menu-dlg h2 { margin: 0; font: 700 26px var(--display); }
+.menu-dlg .dlg-body { overflow: auto; min-height: 0; flex: 1; }
+.menu-dlg form > button { align-self: flex-end; }
+.menu-dlg table { width: 100%; border-collapse: collapse; }
+.menu-dlg th, .menu-dlg td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+.menu-dlg th { color: var(--dim); font: 600 13px var(--display); }
+.menu-dlg td:last-child, .menu-dlg th:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.legal h3 { margin: 14px 0 4px; font: 600 16px var(--display); }
+.legal h3:first-child { margin-top: 0; }
+.legal p, .legal li { color: var(--dim); line-height: 1.5; font-size: 14px; }
 .menu-foot #menuTeamBtn { background: none; padding: 4px 0; color: var(--dim); }
 .custom-match { margin-top: 14px; border-top: 1px solid var(--line); }
 .custom-match > summary { padding: 12px 0 2px; font: 600 16px var(--display); color: var(--dim); }
