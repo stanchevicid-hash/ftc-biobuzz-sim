@@ -9,6 +9,9 @@ import { MOTORS } from './motors.js';
 export const HUBS = [{ id: 'CH', name: 'Control Hub' }, { id: 'EH', name: 'Expansion Hub' }];
 export const PORTS = { motor: 4, servo: 6, i2c: 4, digital: 8, analog: 4, usb: 2 };
 export const key = (hub, kind, n) => `${hub}:${kind}:${n}`;
+/** port names come from robot files other teams share: only real ports count */
+export const validKey = (k) => /^(CH|EH):(motor|servo|i2c|digital|analog|usb):\d$/.test(k);
+export const wiredPorts = (W) => Object.entries(W?.ports || {}).filter(([k]) => validKey(k));
 export const parseKey = (k) => { const [hub, kind, n] = k.split(':'); return { hub, kind, n: +n }; };
 const SENSOR_IF = { distance: 'i2c', color: 'i2c', pinpoint: 'i2c', touch: 'digital', analog: 'analog', webcam: 'usb', limelight: 'usb' };
 const SENSOR_TYPE = { distance: 'REV 2m Distance Sensor', color: 'REV Color Sensor V3', pinpoint: 'goBILDA Pinpoint', touch: 'REV Touch Sensor', analog: 'Analog Input', webcam: 'Webcam', limelight: 'Limelight3A', imu: 'REV internal IMU (BHI260AP)' };
@@ -63,7 +66,7 @@ export function harness(cfg) {
   if (!cfg.wiring || !cfg.hubConfig) return null;
   const W = cfg.wiring, devs = Object.fromEntries(physicalDevices(cfg).map(d => [d.id, d])), out = [];
   for (const [k, c] of Object.entries(cfg.hubConfig)) {
-    if (!c?.name) continue;
+    if (!validKey(k) || !c?.name) continue;
     const p = parseKey(k), kind = javaKind(c.type);
     let physical = null;
     if (kind === 'imu') physical = (cfg.sensors || []).find(s => s.type === 'imu')?.name ?? null;
@@ -80,7 +83,7 @@ export function harness(cfg) {
 export function doctor(cfg, codeNames = []) {
   if (!cfg.wiring || !cfg.hubConfig) return [];
   const R = [], W = cfg.wiring, C = cfg.hubConfig, add = (level, title, fix = '') => R.push({ level, title, fix });
-  const devs = physicalDevices(cfg), where = Object.fromEntries(Object.entries(W.ports).map(([k, id]) => [id, k]));
+  const devs = physicalDevices(cfg), where = Object.fromEntries(wiredPorts(W).map(([k, id]) => [id, k]));
   const label = (k) => { const p = parseKey(k); return `${p.hub === 'CH' ? 'Control Hub' : 'Expansion Hub'} ${p.kind === 'i2c' ? 'I2C bus' : p.kind} ${p.n}`; };
   for (const d of devs) {
     const k = where[d.id];
@@ -97,7 +100,7 @@ export function doctor(cfg, codeNames = []) {
     if (W.swapped?.[d.id]) add('warn', `${d.id}: power and encoder disagree`, 'The motor leads are swapped: positive power counts the encoder down and RUN_TO_POSITION runs away. Swap the leads back (reversing in code does not fix the encoder).');
   }
   for (const [k, c] of Object.entries(C)) {
-    if (!c?.name || javaKind(c.type) === 'imu') continue;
+    if (!validKey(k) || !c?.name || javaKind(c.type) === 'imu') continue;
     if (!W.ports[k]) add('warn', `"${c.name}" is configured on ${label(k)}, but nothing is plugged in there`, 'Plug the device in or delete the entry.');
   }
   const names = Object.values(C).filter(c => c?.name).map(c => c.name), dup = names.filter((n, i) => names.indexOf(n) !== i);

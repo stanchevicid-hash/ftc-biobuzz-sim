@@ -1,5 +1,5 @@
 // Robot > Wiring: plug every device into a hub port by hand (click a device, then a port), with real-world mistakes.
-import { HUBS, PORTS, key, parseKey, physicalDevices, fits, autoWire, doctor } from './wiring.js';
+import { HUBS, PORTS, key, parseKey, physicalDevices, fits, autoWire, doctor, wiredPorts } from './wiring.js';
 import { codeDeviceNames } from './names.js';
 import { setRobot } from './main.js';
 
@@ -36,13 +36,13 @@ export function initLab(app, el) {
   }
 
   function render() {
-    const cfg = app.robotCfg, W = cfg.wiring, devs = physicalDevices(cfg), where = Object.fromEntries(Object.entries(W?.ports || {}).map(([k, id]) => [id, k]));
+    const cfg = app.robotCfg, W = cfg.wiring, devs = physicalDevices(cfg), where = Object.fromEntries(wiredPorts(W).map(([k, id]) => [id, k]));
     const issues = W ? doctor(cfg, codeDeviceNames(app.files || [])) : [];
     el.innerHTML = `
       <div class="row"><button id="lbAuto" class="primary" title="Plug everything into sensible ports and name it like the robot's devices">Auto-wire</button>
         <button id="lbClear">Unplug all</button>
         <label class="chk" title="RS-485 cable between Control Hub and Expansion Hub"><input type="checkbox" id="lbExp" ${W?.expansion ? 'checked' : ''}> Expansion Hub</label></div>
-      <div class="lab-devs">${devs.map(d => `<button class="dev ${where[d.id] ? 'in' : ''} ${selected === d.id ? 'sel' : ''}" data-id="${esc(d.id)}" style="--k:${KIND_COLOR[d.port]}" title="${esc(d.type)}${where[d.id] ? ' in ' + where[d.id] : ''}">${esc(d.id)}</button>`).join('')}</div>
+      <div class="lab-devs">${devs.map(d => `<button class="dev ${where[d.id] ? 'in' : ''} ${selected === d.id ? 'sel' : ''}" data-id="${esc(d.id)}" style="--k:${KIND_COLOR[d.port]}" title="${esc(d.type)}${where[d.id] ? ' in ' + esc(where[d.id]) : ''}">${esc(d.id)}</button>`).join('')}</div>
       <div class="lab-hubs">${hubSvg('CH', cfg)}${hubSvg('EH', cfg)}</div>
       <div id="lbMenu" class="lab-menu hidden"></div>
       <h3 class="lab-h">Robot Doctor</h3>
