@@ -135,10 +135,12 @@ export function initGame(app, el) {
   async function finish(ok, silent = false, points = null) {
     if (!run) return;
     const r = run; r.done = true; run = null;
+    const stale = r.sim !== app.sim;   // the field was reset: the old physics world is freed, nothing to score
     const time = r.t0 != null ? r.sim.t - r.t0 : null;
     if (r.useCode || r.bots) await stopOpMode();
     app.renderer.setMarkers([]);
     if (silent) return;
+    if (stale) { render(null); return; }
     let result = null;
     if (r.bots) {
       const S = r.sim.scorer.breakdown(r.sim.t), win = S.red.total > S.blue.total;
