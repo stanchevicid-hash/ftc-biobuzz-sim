@@ -26,13 +26,14 @@ export function initLab(app, el) {
         const internal = k === 'CH:i2c:0', wrong = d && d.port !== kind, sw = id && W.swapped?.[id];
         const cls = ['port', id ? 'used' : '', wrong ? 'wrong' : '', selected && devs[selected] && fits(devs[selected], kind) ? 'target' : '', menuFor === k ? 'open' : ''].join(' ');
         body += `<g class="${cls}" data-k="${k}" tabindex="0" role="button" aria-label="${label} ${i}${id ? ', ' + esc(id) : ''}">
-          <rect x="${x}" y="${y}" width="${w}" height="24" rx="2"/>${id ? `<rect x="${x}" y="${y}" width="3" height="24" fill="${KIND_COLOR[d?.port] || '#888'}"/>` : ''}
+          <rect x="${x}" y="${y}" width="${w}" height="24" rx="2"/>${id ? `<rect x="${x}" y="${y}" width="${w}" height="24" rx="2" fill="${KIND_COLOR[d?.port] || '#888'}" opacity=".22"/><rect x="${x}" y="${y + 22}" width="${w}" height="2" fill="${KIND_COLOR[d?.port] || '#888'}"/>` : ''}
           <text x="${x + w / 2}" y="${y + 16}" text-anchor="middle">${id ? esc(id.length > w / 7 ? id.slice(0, Math.floor(w / 7) - 1) + '…' : id) : (internal ? 'IMU' : i)}${sw ? ' ±' : ''}</text></g>`;
       }
       y += 34;
     }
     return `<svg class="hub ${on ? '' : 'off'}" viewBox="0 0 360 ${y + 4}" role="group" aria-label="${hub === 'CH' ? 'Control Hub' : 'Expansion Hub'}">
-      <rect x="1" y="1" width="358" height="${y + 2}" rx="6" class="hub-body"/><text x="10" y="20" class="hub-name">${hub === 'CH' ? 'Control Hub' : 'Expansion Hub'}</text>${body}</svg>`;
+      <rect x="1" y="1" width="358" height="${y + 2}" rx="6" class="hub-body"/><text x="10" y="20" class="hub-name">${hub === 'CH' ? 'Control Hub' : 'Expansion Hub'}</text>
+      <circle cx="346" cy="15" r="4" fill="${on ? '#3f9b4a' : '#55595e'}"><title>${on ? 'Connected' : 'Not connected'}</title></circle><line x1="10" y1="26" x2="350" y2="26" stroke="#2c3135"/>${body}</svg>`;
   }
 
   function render() {

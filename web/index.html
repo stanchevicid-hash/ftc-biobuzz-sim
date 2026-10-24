@@ -94,8 +94,8 @@
     <!-- DRIVER STATION -->
     <div class="panel" id="p-ds">
       <div id="gameBox"></div>
+      <details class="custom-match" id="customMatch"><summary>Custom match</summary>
       <section class="block">
-        <h2>Match</h2>
         <div class="grid2">
           <label>Mode <select id="matchMode"><option value="free">Free practice</option><option value="match">Full match (0:30 + 0:08 + 2:00)</option></select></label>
           <label>Alliance <select id="alliance"><option value="red">Red</option><option value="blue">Blue</option></select></label>
@@ -111,13 +111,14 @@
       </section>
 
       <section class="block">
-        <h2>NECTAR</h2>
+        <h2 title="Human player">NECTAR</h2>
         <div class="row">
           <button id="hpRed" class="chip red" title="Human player adds a red NECTAR">+ Red</button>
           <button id="hpBlue" class="chip blue" title="Human player adds a blue NECTAR">+ Blue</button>
         </div>
         <label class="check"><input type="checkbox" id="hpAuto" checked> Auto</label>
       </section>
+      </details>
     </div>
 
     <!-- DRIVER HUB: the Driver Station app -->

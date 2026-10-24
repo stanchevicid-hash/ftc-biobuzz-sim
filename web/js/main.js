@@ -16,6 +16,7 @@ import { initLab } from './lab.js';
 import { initDriverHub } from './driverhub.js';
 import { initGame } from './game.js';
 import { initMenu } from './menu.js';
+import { iconizeToolbar, setPauseIcon } from './icons.js';
 import { mechCommands, mechStatus, predictArc } from './manual.js';
 import { DEFAULT_NOISE } from './sensors.js';
 import { missingNames, suggest } from './names.js';
@@ -337,7 +338,7 @@ document.querySelectorAll('#camBtns [data-cam]').forEach(b => b.onclick = () => 
   app.renderer.setMode(b.dataset.cam === 'driverRed' && $('alliance').value === 'blue' ? 'driverBlue' : b.dataset.cam);
 });
 $('camInset').onclick = () => { app.renderer.showCam = !app.renderer.showCam; $('camInset').classList.toggle('on', app.renderer.showCam); };
-$('pauseBtn').onclick = () => { app.running = !app.running; $('pauseBtn').textContent = app.running ? '⏸' : '▶'; };
+$('pauseBtn').onclick = () => { app.running = !app.running; setPauseIcon(app.running); };
 $('speed').onchange = () => app.speed = +$('speed').value;
 $('quality').value = app.renderer.quality;
 $('quality').onchange = () => app.renderer.setQuality($('quality').value);
@@ -451,7 +452,7 @@ $('csvBtn').onclick = () => {
 $('replayBtn').onclick = async () => {
   if (app.rec.frames.length < 10) { alert('Nothing recorded yet. Run the simulation first.'); return; }
   await stopOpMode();
-  app.running = false; $('pauseBtn').textContent = '▶';
+  app.running = false; setPauseIcon(false);
   const f0 = app.rec.frames[0].t;
   app.replay = { t: 0, playing: false, t0: f0, dur: app.rec.duration };
   $('rpSlider').max = app.replay.dur.toFixed(2); $('rpSlider').value = 0; $('replayBar').classList.remove('hidden');
@@ -466,7 +467,7 @@ function replaySeek(t) {
 function replayStep(dt) { const R = app.replay; if (R.playing) { replaySeek(R.t + dt * +$('rpSpeed').value); if (R.t >= R.dur) { R.playing = false; $('rpPlay').textContent = '▶'; } } }
 $('rpSlider').oninput = () => { app.replay.playing = false; $('rpPlay').textContent = '▶'; replaySeek(+$('rpSlider').value); };
 $('rpPlay').onclick = () => { const R = app.replay; if (R.t >= R.dur) R.t = 0; R.playing = !R.playing; $('rpPlay').textContent = R.playing ? '⏸' : '▶'; };
-$('rpExit').onclick = () => { app.running = true; $('pauseBtn').textContent = '⏸'; resetSim(); };
+$('rpExit').onclick = () => { app.running = true; setPauseIcon(true); resetSim(); };
 $('otherRobot').onchange = async () => { await stopOpMode(); resetSim(); };
 
 // ------------------------------------------------------------------ Settings tab
@@ -513,6 +514,7 @@ const openWiring = () => { switchTab('robot'); $('robotNav').querySelector('[dat
 initDriverHub(app, $, openWiring);
 const game = initGame(app, $('gameBox'));
 initMenu(app, { switchTab, game });
+iconizeToolbar(); setPauseIcon(true);
 initSettings();
 $('robotNav').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; $('robotNav').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); for (const id of ['robotSetup', 'robotWiring', 'p-calib']) $(id).classList.toggle('hidden', id !== b.dataset.r); if (b.dataset.r === 'robotWiring') lab.render(); };
 setServer(await bridge.online());
