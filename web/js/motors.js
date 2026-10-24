@@ -103,7 +103,7 @@ export class Motor {
   torque(vBatt) {
     const m = this.m, w = this.omega, ws = this.wFree, Ts = m.stallTorque * this.eff;
     if (this.duty === 0 && !this.cmd.brake) { this.current = 0; return -Math.sign(w) * Ts * 0.01; } // FLOAT: only friction
-    const v = this.duty * vBatt / 12;                    // fraction of nominal voltage
+    const v = (this.swapped ? -1 : 1) * this.duty * vBatt / 12;   // fraction of nominal voltage; swapped leads reverse it, the encoder still reads the shaft
     const t = Ts * (v - w / ws);                         // short-circuit braking when duty = 0 and BRAKE
     this.current = m.stallCurrent * Math.abs(v - w / ws) + (Math.abs(w) > 0.1 ? m.freeCurrent : 0);
     return t - Math.sign(w) * Ts * this.coulomb - Ts * this.viscous * w / ws;    // gearbox drag: loaded robots reach ~90-95% of free speed

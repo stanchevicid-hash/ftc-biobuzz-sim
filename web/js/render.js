@@ -140,6 +140,33 @@ export class Renderer {
     }
   }
 
+  /** mission gates and target zones drawn on the tiles: [{ x, y, r }] rings or [{ rect: [x0, x1, y0, y1] }]; done ones turn green */
+  setMarkers(list = []) {
+    if (this.markers) { this.scene.remove(this.markers); this.markers.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); }); }
+    this.markers = new THREE.Group(); this.scene.add(this.markers);
+    list.forEach((m, i) => {
+      const color = m.done ? 0x3f9b4a : (m.next ? 0xf2a900 : 0x8a9096);
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: m.done ? 0.55 : 0.85, toneMapped: false });
+      let mesh;
+      if (m.rect) { const [x0, x1, y0, y1] = m.rect; mesh = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), mat); mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0.005); mat.opacity = 0.35; }
+      else { mesh = new THREE.Mesh(new THREE.RingGeometry((m.r ?? 0.2) - 0.03, m.r ?? 0.2, 40), mat); mesh.position.set(m.x, m.y, 0.006); }
+      this.markers.add(mesh);
+    });
+  }
+
+  /** predicted flight of the next ball, as a dashed line; null hides it */
+  setArc(pts) {
+    if (!this.arc) {
+      this.arcGeo = new THREE.BufferGeometry(); this.arcGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * 260), 3));
+      this.arc = new THREE.Line(this.arcGeo, new THREE.LineDashedMaterial({ color: 0xf2a900, dashSize: 0.05, gapSize: 0.035, toneMapped: false }));
+      this.arc.frustumCulled = false; this.scene.add(this.arc);
+    }
+    this.arc.visible = !!(pts && pts.length > 1); if (!this.arc.visible) return;
+    const a = this.arcGeo.attributes.position, n = Math.min(pts.length, 260);
+    for (let i = 0; i < n; i++) a.setXYZ(i, pts[i][0], pts[i][1], pts[i][2]);
+    a.needsUpdate = true; this.arcGeo.setDrawRange(0, n); this.arc.computeLineDistances();
+  }
+
   setTrail(points) {
     if (!this.trailGeo) return;
     const a = this.trailGeo.attributes.position, n = Math.min(points.length, 20000);

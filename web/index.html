@@ -18,9 +18,10 @@
     <div class="brand-text"><b>BIOBUZZ Sim</b><span>FTC 2026-27</span></div>
   </div>
   <nav id="tabs" class="tabs" aria-label="Sections">
-    <button data-tab="ds" class="on">Match</button>
-    <button data-tab="bench">Test bench</button>
+    <button data-tab="ds" class="on">Drive</button>
     <button data-tab="robot">Robot</button>
+    <button data-tab="dh">Driver Hub</button>
+    <button data-tab="bench">Tests</button>
     <button data-tab="code">Code</button>
     <button data-tab="settings">Settings</button>
     <button data-tab="help">Help</button>
@@ -51,17 +52,17 @@
     </div>
 
     <div id="keys" class="keys hidden" role="dialog" aria-label="Keyboard controls">
-      <h4>Keyboard is gamepad1</h4>
+      <h4>Keyboard</h4>
       <span><kbd>W</kbd><kbd>S</kbd></span><span>Drive forward / back</span>
       <span><kbd>A</kbd><kbd>D</kbd></span><span>Strafe left / right</span>
       <span><kbd>←</kbd><kbd>→</kbd></span><span>Turn</span>
       <span><kbd>↑</kbd><kbd>↓</kbd></span><span>Right stick up / down</span>
       <span><kbd>Shift</kbd></span><span>Slow mode (hold)</span>
-      <span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span><span>A B X Y</span>
-      <span><kbd>Q</kbd><kbd>E</kbd></span><span>Left / right bumper</span>
-      <span><kbd>Z</kbd><kbd>C</kbd></span><span>Left / right trigger</span>
-      <span><kbd>I</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></span><span>D-pad</span>
-      <p>No OpMode running: sticks drive the robot. In TeleOp your code reads the keys like a gamepad.</p>
+      <span><kbd>C</kbd> / <kbd>Z</kbd></span><span>Intake in / out</span>
+      <span><kbd>1</kbd></span><span>Flywheel on / off</span>
+      <span><kbd>E</kbd></span><span>Shoot</span>
+      <span><kbd>I</kbd><kbd>K</kbd></span><span>Hood up / down</span>
+      <p title="1 2 3 4 = A B X Y, Q E = bumpers, Z C = triggers, I J K L = d-pad">With an OpMode running, your code reads these keys as gamepad1.</p>
     </div>
     <div id="toolbar" class="dock">
       <div class="seg" id="camBtns" role="group" aria-label="Camera">
@@ -91,6 +92,7 @@
   <aside id="side" class="side">
     <!-- DRIVER STATION -->
     <div class="panel" id="p-ds">
+      <div id="gameBox"></div>
       <section class="block">
         <h2>Match</h2>
         <div class="grid2">
@@ -107,26 +109,6 @@
         </div>
       </section>
 
-      <section class="block ds">
-        <h2>OpMode</h2>
-        <select id="opmode" class="opmode"><option value="">Build your code in the Code tab</option></select>
-        <div class="dsbtns">
-          <button id="initBtn" class="ds-init">Init</button>
-          <button id="startBtn" class="ds-start" disabled>Start</button>
-          <button id="stopBtn" class="ds-stop" disabled>Stop</button>
-        </div>
-        <p id="opState" class="status">No OpMode running</p>
-        <div id="errBox" class="err hidden"></div>
-        <div id="nameCheck" class="namecheck hidden" aria-live="polite"></div>
-      </section>
-
-      <section class="block">
-        <h2>Telemetry</h2>
-        <pre id="tele" class="tele"></pre>
-        <details id="graphBox"><summary>Graph</summary><div id="teleSeries" class="series"></div><canvas id="teleGraph" width="400" height="140"></canvas></details>
-        <details><summary>Log</summary><pre id="log" class="log"></pre></details>
-      </section>
-
       <section class="block">
         <h2>NECTAR</h2>
         <div class="row">
@@ -135,6 +117,30 @@
         </div>
         <label class="check"><input type="checkbox" id="hpAuto" checked> Auto</label>
       </section>
+    </div>
+
+    <!-- DRIVER HUB: the Driver Station app -->
+    <div class="panel hidden" id="p-dh">
+      <div class="dh">
+        <div class="dh-bar"><b id="dhRobot">28284-RC</b><span id="dhPing" title="Robot ping">— ms</span><span id="dhBatt" title="Robot battery">— V</span>
+          <span class="dh-pads"><i id="dhU1" title="gamepad1">U1</i><i id="dhU2" title="gamepad2">U2</i></span>
+          <button id="dhMenu" class="dh-menu" aria-label="Menu" aria-expanded="false">⋮</button></div>
+        <div id="dhMain">
+          <div class="dh-pick"><button id="dhAuto" class="dh-list" title="Autonomous">◀ Auto</button><select id="opmode" class="opmode dh-op"><option value="">Build your code in the Code tab</option></select><button id="dhTele" class="dh-list" title="TeleOp">TeleOp ▶</button></div>
+          <div class="dh-run"><div class="dsbtns">
+          <button id="initBtn" class="ds-init">Init</button>
+          <button id="startBtn" class="ds-start" disabled>Start</button>
+          <button id="stopBtn" class="ds-stop" disabled>Stop</button>
+        </div><div class="dh-time"><span id="dhTimer">0:00</span><label class="chk" title="Stop autonomous after 30 s, like at an event"><input type="checkbox" id="dhAuto30" checked> 30 s</label></div></div>
+          <p id="opState" class="status">No OpMode running</p>
+        <div id="errBox" class="err hidden"></div>
+        <div id="nameCheck" class="namecheck hidden" aria-live="polite"></div>
+          <div class="dh-tele">        <pre id="tele" class="tele"></pre>
+        <details id="graphBox"><summary>Graph</summary><div id="teleSeries" class="series"></div><canvas id="teleGraph" width="400" height="140"></canvas></details>
+        <details><summary>Log</summary><pre id="log" class="log"></pre></details></div>
+        </div>
+        <div id="dhConfig" class="hidden"></div>
+      </div>
     </div>
 
     <!-- CODE -->
@@ -163,9 +169,10 @@
     </div>
     <div class="panel hidden" id="p-robot">
       <nav class="subnav" id="robotNav" aria-label="Robot">
-        <button data-r="robotSetup" class="on">Setup</button><button data-r="p-calib">Calibration</button>
+        <button data-r="robotSetup" class="on">Setup</button><button data-r="robotWiring">Wiring</button><button data-r="p-calib">Calibration</button>
       </nav>
       <div id="robotSetup"></div>
+      <div id="robotWiring" class="hidden"></div>
       <div id="p-calib" class="hidden"></div>
     </div>
     <div class="panel hidden" id="p-settings">

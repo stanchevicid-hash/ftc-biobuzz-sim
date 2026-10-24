@@ -12,6 +12,10 @@ import { initRobotTab } from './setup.js';
 import { initCalibTab, initRandomTab } from './calib.js';
 import { HELP_HTML } from './help.js';
 import { initBenchTab } from './benchui.js';
+import { initLab } from './lab.js';
+import { initDriverHub } from './driverhub.js';
+import { initGame } from './game.js';
+import { mechCommands, mechStatus, predictArc } from './manual.js';
 import { DEFAULT_NOISE } from './sensors.js';
 import { missingNames, suggest } from './names.js';
 import { cue, setMuted, isMuted } from './sounds.js';
@@ -46,8 +50,8 @@ export function resetSim(extra = {}) {
   const robotCfg = app.robotCfg;
   app.replay = null; $('replayBar').classList.add('hidden');
   app.sim = new Simulation(RAPIER, {
-    robotCfg, pose: startPoseValue(), alliance: $('alliance').value, others: otherRobots(),
-    params: { ...(app.calib.params || {}), ...(extra.params || {}) }, noise: { ...app.noise, ...(extra.noise || {}) }, seed: extra.seed ?? 1,
+    robotCfg, pose: extra.pose ?? startPoseValue(), alliance: extra.alliance ?? $('alliance').value, others: extra.others ?? otherRobots(),
+    params: { ...(app.calib.params || {}), ...(extra.params || {}) }, noise: { ...app.noise, ...(extra.noise || {}) }, seed: extra.seed ?? 1, preload: extra.preload,
   });
   app.sim.hp.auto = $('hpAuto').checked;
   app.renderer.setSim(app.sim, app.robotModel);
@@ -101,7 +105,8 @@ function manualCommands(gp, robot = app.sim.robot) {
   });
   const mx = Math.max(1, ...ws.map(Math.abs));
   sim.robot.wheels.forEach((wh, i) => { out.motors[wh.motor] = { mode: 'power', p: ws[i] / mx * (wh.motorDir ?? 1), brake: true }; });
-  return out;
+  const m = mechCommands(gp, robot);                    // intake, flywheel, hood, feeder without code
+  return { motors: { ...m.motors, ...out.motors }, servos: m.servos };
 }
 
 async function doTick() {
@@ -113,14 +118,15 @@ async function doTick() {
     try {
       const r = await bridge.sync(sim.t, snap, readGamepads(), 40);
       if (sim !== app.sim) return;            // the simulation was reset while waiting
-      sim.setCommands(r.out);
+      sim.setCodeCommands(r.out);
       handleStatus(r);
     } catch (e) { setServer(false); app.op.state = 'idle'; showError({ type: 'bridge', message: String(e) }); }
   } else if ($('manualDrive').checked && app.match.phase !== 'auto') {
     sim.setCommands(manualCommands(readGamepads()[0]));
   } else sim.setCommands({});
-  if (sim.others.length) { const g2 = readGamepads()[1]; for (const o of sim.others) o.applyCommands(manualCommands(g2, o)); }
+  if (sim.others.length) { const g2 = readGamepads()[1]; for (const o of sim.others) o.applyCommands(o.bot ? o.bot.step(sim, o) : manualCommands(g2, o)); }
   sim.tick();
+  app.onTick?.(sim);
   app.rec.capture(sim, { phase: app.match.phase, op: app.op.state, tele: app.lastTele });
   matchStep();
 }
@@ -184,7 +190,7 @@ function updateDsButtons() {
   $('codeOp').textContent = $('opmode').selectedOptions[0]?.textContent || '';
   $('opState').textContent = { idle: '', init: 'Ready', running: 'Running', stopped: 'Stopped', error: 'Crashed' }[st] ?? st;
 }
-async function initOpMode() {
+export async function initOpMode() {
   if (app.batch) { alert('A randomized batch is running. Wait for it to finish or stop it in the Randomize tab.'); return; }
   const cls = $('opmode').value, om = app.opmodes.find(o => o.cls === cls); if (!om) return;
   hideError(); $('tele').textContent = ''; graph.reset();
@@ -196,7 +202,7 @@ async function initOpMode() {
   } catch (e) { showError({ type: 'init', message: String(e) }); }
   updateDsButtons();
 }
-async function startOpMode() {
+export async function startOpMode() {
   const r = await bridge.start(); app.op.state = r.state; app.op.t0 = app.sim.t;
   const m = app.match;
   if (m.mode === 'match') {
@@ -236,7 +242,11 @@ function renderNameCheck() {
   box.querySelectorAll('a').forEach(a => a.onclick = () => { switchTab('code'); gotoLine(a.dataset.file, +a.dataset.line); });
   $('ncApply').onclick = () => {
     const cfg = JSON.parse(JSON.stringify(app.robotCfg)); cfg.aliases = { ...(cfg.aliases || {}) };
-    box.querySelectorAll('select[data-alias]').forEach(s => { if (s.value) cfg.aliases[s.dataset.alias] = s.value; });
+    box.querySelectorAll('select[data-alias]').forEach(s => {
+      if (!s.value) return;
+      const entry = cfg.hubConfig && Object.values(cfg.hubConfig).find(c => c?.name === s.value);
+      if (entry) entry.name = s.dataset.alias; else cfg.aliases[s.dataset.alias] = s.value;
+    });
     setRobot(cfg, app.robotModel);
   };
 }
@@ -245,6 +255,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt
 
 function fillOpModes(list) {
   app.opmodes = list;
+  setTimeout(() => app.onOpModes?.(), 0);
   const sel = $('opmode'), prev = sel.value;
   sel.innerHTML = list.length ? '' : '<option value="">No @TeleOp or @Autonomous classes in your code</option>';
   for (const kind of ['Autonomous', 'TeleOp']) {
@@ -314,9 +325,10 @@ async function loadExamples(replace) {
 function switchTab(t) {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('hidden', p.id !== 'p-' + t));
-  $('side').classList.toggle('wide', t === 'code' || t === 'robot' || t === 'help' || t === 'bench');
+  $('side').classList.toggle('wide', t === 'code' || t === 'robot' || t === 'help' || t === 'bench' || t === 'dh');
   if (t === 'code') showFile();
   if (t === 'bench') app.onRobotChangedBench?.();
+  if (t === 'ds') game?.render();
 }
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
 document.querySelectorAll('#camBtns [data-cam]').forEach(b => b.onclick = () => {
@@ -410,7 +422,8 @@ function hud() {
   const r = sim.robot, p = r.pose();
   const held = r.holders.map(h => `${h.id} ${h.balls.length}`).join(', ');
   $('simInfo').textContent = `${sim.t.toFixed(1)} s   x ${(p.x / 0.0254).toFixed(1)} in   y ${(p.y / 0.0254).toFixed(1)} in   ${p.heading.toFixed(0)}°\n` +
-    `Battery ${sim.battery.v.toFixed(2)} V   ${sim.battery.i.toFixed(1)} A   holding: ${held || 'nothing'}${slow}`;
+    `Battery ${sim.battery.v.toFixed(2)} V   ${sim.battery.i.toFixed(1)} A   holding: ${held || 'nothing'}${slow}` +
+    ((ms) => ms && ms.fly ? `\nFlywheel ${ms.rpm.toFixed(0)} / ${ms.target} RPM   hood ${ms.hood?.toFixed(2) ?? '-'}` : '')(app.op.state === 'running' ? null : mechStatus(r));
   const pads = padNames(); $('padInfo').textContent = pads.length ? 'Gamepad: ' + pads.join(', ') : ''; $('padInfo').title = 'Keyboard: ' + KEY_HELP;
 }
 let trailLen = -1, lastFrame = performance.now();
@@ -418,6 +431,7 @@ function frame() {
   const now = performance.now(), dt = (now - lastFrame) / 1000; lastFrame = now;
   if (app.replay) replayStep(dt);
   if (app.renderer.trail && app.rec.trail.length !== trailLen) { trailLen = app.rec.trail.length; app.renderer.setTrail(app.rec.trail); }
+  app.renderer.setArc(app.sim ? predictArc(app.sim.robot) : null);
   app.renderer.render(app.tagView); hud(); if ($('graphBox').open) graph.draw(); requestAnimationFrame(frame);
 }
 
@@ -493,8 +507,12 @@ initRobotTab(app, $('robotSetup'));
 initCalibTab(app, $('p-calib'));
 initRandomTab(app, $('p-random'));
 initBenchTab(app, $('p-bench'), $('p-random'));
+const lab = initLab(app, $('robotWiring'));
+const openWiring = () => { switchTab('robot'); $('robotNav').querySelector('[data-r="robotWiring"]').click(); };
+initDriverHub(app, $, openWiring);
+const game = initGame(app, $('gameBox'));
 initSettings();
-$('robotNav').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; $('robotNav').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); for (const id of ['robotSetup', 'p-calib']) $(id).classList.toggle('hidden', id !== b.dataset.r); };
+$('robotNav').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; $('robotNav').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); for (const id of ['robotSetup', 'robotWiring', 'p-calib']) $(id).classList.toggle('hidden', id !== b.dataset.r); if (b.dataset.r === 'robotWiring') lab.render(); };
 setServer(await bridge.online());
 if (app.serverOk) { if (!app.files) await loadExamples(true); else showFile(); build(); } else { app.files = app.files || []; showFile(); }
 setInterval(async () => { const ok = await bridge.online(); if (ok !== app.serverOk) { setServer(ok); updateDsButtons(); } }, 3000);
