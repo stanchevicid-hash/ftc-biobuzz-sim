@@ -378,3 +378,24 @@ body.menu-open .viewport { height: 100% !important; flex: 1 !important; }
 /* soft vignette on every quality level (Ultra also grades and adds grain in the shader) */
 .viewport::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
   background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .28) 100%); }
+
+/* start screen: team number, ASA credit and links */
+.menu-team { display: flex; flex-direction: column; gap: 8px; max-width: 320px; margin-bottom: 18px; }
+.menu-team label { color: var(--dim); font: 600 15px var(--display); }
+.menu-team div { display: flex; gap: 8px; }
+.menu-team input { flex: 1; font: 700 28px var(--display); letter-spacing: .04em; padding: 8px 12px; background: rgba(255, 255, 255, .06); border: 1px solid var(--line); }
+.menu-team input:focus { border-color: var(--honey); outline: none; }
+.menu-team button { font: 700 18px var(--display); padding: 0 22px; }
+.menu-foot { flex-wrap: wrap; }
+.menu-asa { display: flex; align-items: center; gap: 10px; color: var(--dim); text-decoration: none; margin-right: 6px; }
+.menu-asa img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; clip-path: circle(41% at 50% 50%); transform: scale(1.18); }
+.menu-asa span { display: flex; flex-direction: column; line-height: 1.15; font-size: 13px; }
+.menu-asa b { color: #fff; font: 700 17px var(--display); letter-spacing: .03em; }
+.menu-asa small { color: var(--faint); font-size: 11.5px; }
+.menu-asa:hover b { color: #ff4fa3; }
+.menu-social { display: flex; gap: 6px; margin-right: auto; }
+.menu-social a { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); color: var(--dim); }
+.menu-social a:hover, .menu-social a:focus-visible { color: #fff; border-color: #ff4fa3; }
+.menu-social svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.menu-social svg .fill { fill: currentColor; stroke: none; }
+.menu-foot #menuTeamBtn { background: none; padding: 4px 0; color: var(--dim); }
