@@ -45,9 +45,9 @@ export class Renderer {
   }
 
   /** low: plain shading for weak PCs. high: soft shadows, reflections, MSAA. ultra: + ambient occlusion, bloom, sharper shadows. */
-  setQuality(q) {
+  setQuality(q, save = true) {
     this.quality = q; this.slowFrames = 0;
-    try { localStorage.setItem('ftcsim.quality', q); } catch { }
+    if (save) try { localStorage.setItem('ftcsim.quality', q); } catch { }
     const dpr = window.devicePixelRatio || 1;
     this.r.setPixelRatio(q === 'low' ? 1 : Math.min(q === 'ultra' ? 2 : 1.5, dpr));
     this.r.shadowMap.type = q === 'low' ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
@@ -75,7 +75,7 @@ export class Renderer {
     const now = performance.now(), dt = now - (this.lastT || now); this.lastT = now;
     if (document.hidden || dt > 500) return;
     this.slowFrames = dt > 34 ? this.slowFrames + 1 : Math.max(0, this.slowFrames - 2);
-    if (this.slowFrames > 90 && this.quality !== 'low') { this.setQuality(this.quality === 'ultra' ? 'high' : 'low'); this.onAutoQuality?.(this.quality); }
+    if (this.slowFrames > 90 && this.quality !== 'low') { this.setQuality(this.quality === 'ultra' ? 'high' : 'low', false); this.onAutoQuality?.(this.quality); }
   }
 
   setSim(sim, robotModel) {

@@ -23,8 +23,8 @@ export function initBenchTab(app, el, randomEl) {
     if (current === 'auto') return;
     const info = benchInfo(app.robotCfg), L = info.launcher;
     if (current === 'shooter') body.innerHTML = !L ? missing('shooter') : `
-      <div class="grid3">${field('sDist', 'Distance, in', 30, 'step="1"')}${field('sRpm', 'Flywheel RPM', 2200, 'step="50"')}
-      ${L.hood ? field('sHood', 'Hood (0–1)', 0.9, 'step="0.05" min="0" max="1"') : ''}${field('sShots', 'Shots', 4, 'min="1" max="8"')}
+      <div class="grid3">${field('sDist', 'Distance, in', 42, 'step="1"')}${field('sRpm', 'Flywheel RPM', 3000, 'step="50"')}
+      ${L.hood ? field('sHood', 'Hood (0–1)', 0.7, 'step="0.05" min="0" max="1"') : ''}${field('sShots', 'Shots', 4, 'min="1" max="8"')}
       ${field('sInt', 'Shot gap, s', 0.4, 'step="0.05"')}${field('sBat', 'Battery, V', 13, 'step="0.1"')}</div>
       ${runRow(`<button id="bSweep" title="Every distance${L.hood ? ' × hood' : ''} combination">Sweep</button>`)}
       <details class="sweepopts"><summary>Sweep</summary><div class="grid3"><label>Distances, in <input type="text" id="sDists" value="18, 24, 30, 36, 42"></label>
