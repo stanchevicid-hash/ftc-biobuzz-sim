@@ -99,6 +99,15 @@ export function initGame(app, el) {
     run.t0 = app.sim.t;
   }
 
+  /** big stars and the time over the field for a moment, with a honey burst */
+  function celebrate(r) {
+    const view = document.getElementById('view'), box = document.createElement('div');
+    box.className = 'win'; box.setAttribute('role', 'status');
+    box.innerHTML = '<i class="burst"></i><b>' + [0, 1, 2].map(i => '<span class="' + (i < r.stars ? 'on' : '') + '" style="--d:' + (i * 0.12) + 's">★</span>').join('') + '</b><em>' + (r.points != null ? r.points + ' points' : fmt(r.time)) + (r.best ? '<small>New record</small>' : '') + '</em>';
+    view.appendChild(box);
+    setTimeout(() => box.classList.add('out'), 1900); setTimeout(() => box.remove(), 2400);
+  }
+
   async function countdown(r) {
     const view = document.getElementById('view'), box = document.createElement('div');
     box.className = 'countdown'; box.setAttribute('aria-live', 'assertive'); view.appendChild(box);
@@ -108,6 +117,7 @@ export function initGame(app, el) {
   }
 
   app.onTick = (sim) => {
+    if (run && run.sim !== sim && run.t0 != null && !run.done) { finish(false); return; }   // the field was reset under the mission
     if (!run || run.sim !== sim || run.t0 == null || run.done) return;
     if (run.bots) {                                    // the match clock and scoring run as usual; just wait for the end
       const S = sim.scorer.breakdown(sim.t), c = el.querySelector('#gmClock'); if (c) c.textContent = `${S.red.total} : ${S.blue.total}`;
@@ -140,6 +150,7 @@ export function initGame(app, el) {
       if (better) { records[r.m.id] = r.m.points ? v : +v.toFixed(2); save(records); }
       result = { m: r.m, name: r.m.name, ok, time, points, stars: ok ? starsOf(r.m, v) : 0, best: better };
       cue(ok ? 'bells' : 'buzzer');
+      if (ok) celebrate(result);
     }
     render(result);
   }
