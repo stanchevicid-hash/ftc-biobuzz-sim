@@ -150,5 +150,5 @@ export function initGame(app, el) {
 
   app.onOpModes = () => { if (!run) render(); };
   render();
-  return { render };
+  return { render, startBots };
 }

@@ -19,7 +19,7 @@ function fromKeyboard() {
   if (keys.has('ShiftLeft') || keys.has('ShiftRight')) for (const a of ['left_stick_x', 'left_stick_y', 'right_stick_x', 'right_stick_y']) g[a] *= 0.4;   // precise driving
   g.left_trigger = k('KeyZ'); g.right_trigger = k('KeyC');
   Object.assign(g, { a: !!k('Digit1'), b: !!k('Digit2'), x: !!k('Digit3'), y: !!k('Digit4'), left_bumper: !!k('KeyQ'), right_bumper: !!k('KeyE'),
-    dpad_up: !!k('KeyI'), dpad_down: !!k('KeyK'), dpad_left: !!k('KeyJ'), dpad_right: !!k('KeyL'), start: !!k('Enter'), back: !!k('Backspace'), connected: true });
+    dpad_up: !!k('KeyI'), dpad_down: !!k('KeyK'), dpad_left: !!k('KeyJ'), dpad_right: !!k('KeyL'), start: !!k('Enter'), back: !!k('Backspace'), connected: true, keyboard: true });
   return g;
 }
 
