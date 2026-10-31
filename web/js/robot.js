@@ -231,8 +231,19 @@ export class Robot {
         if (w.type === 'mecanum') {
           const xW = qRotate(q, [1, 0, 0]), sX = dot(this.pointVel(cP), xW), kX = this.invMassAlong(r, xW);
           const maxX = (w.muScrub ?? DEFAULT_MU_SCRUB) * fric * w.N * dt;
-          let lamX = -sX / kX, accX = clamp((w.accX || 0) + lamX, -maxX, maxX); lamX = accX - (w.accX || 0); w.accX = accX;
-          b.applyImpulseAtPoint(v3(scale(xW, lamX)), v3(cP), true);
+          // while the rollers turn, the patch is already sliding: friction opposes the TOTAL slip, so a small sideways
+          // velocity meets mu*N*sX/|slip| (soft, like a real mecanum robot that drifts and gets pushed) instead of a
+          // dry-friction wall. Rollers still (parked, pure turn-in-place start): the dry clamp below holds it.
+          const slip = Math.hypot(sX, sL);
+          if (Math.abs(sL) > 0.05) {
+            if (it === 0) {
+              const c = maxX / dt / slip, lamX = clamp(-sX * c * dt / (1 + c * dt * kX), -maxX, maxX);
+              b.applyImpulseAtPoint(v3(scale(xW, lamX)), v3(cP), true);
+            }
+          } else {
+            let lamX = -sX / kX, accX = clamp((w.accX || 0) + lamX, -maxX, maxX); lamX = accX - (w.accX || 0); w.accX = accX;
+            b.applyImpulseAtPoint(v3(scale(xW, lamX)), v3(cP), true);
+          }
         }
       }
     }

@@ -12,7 +12,7 @@ const save = (k, v) => { try { localStorage.setItem('ftcsim.' + k, JSON.stringif
 
 // ------------------------------------------------------------------ headless drive experiments (no Java involved)
 function driveTest(app, params, kind, power, seconds, voltage) {
-  const sim = new Simulation(app.R, { robotCfg: app.robotCfg, pose: { x: 0, y: -1.0, heading: 90 }, alliance: 'red', params, battery: voltage, preload: 0, seed: 3 });
+  const sim = new Simulation(app.R, { robotCfg: app.robotCfg, pose: { x: 0, y: -1.0, heading: 90 }, alliance: 'red', params, battery: voltage, preload: 0, seed: 3, noise: { motorSpreadPct: 0 } });
   // move the robot to an open area of the field (between the HIVE and the blue wall)
   sim.robot.body.setTranslation({ x: 0, y: -1.05, z: 0.001 }, true);
   const wheels = sim.robot.wheels;

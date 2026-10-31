@@ -491,7 +491,7 @@ const NOISE_LABEL = {
   sensorDelayMs: 'Sensor delay, ms', actuatorDelayMs: 'Command delay, ms', imuNoiseDeg: 'IMU noise, °', imuDriftDegPerMin: 'IMU drift, °/min',
   distNoiseFrac: 'Distance noise, ×', distNoiseMm: 'Distance noise, mm', colorNoise: 'Color noise',
   tagPosNoise: 'Tag position noise, m', tagAngNoiseDeg: 'Tag angle noise, °', encoderNoiseTicks: 'Encoder noise, ticks', pinpointNoise: 'Pinpoint noise, m',
-  shotSpeedPct: 'Shot speed spread, %', shotAngleDeg: 'Shot angle spread, °',
+  shotSpeedPct: 'Shot speed spread, %', shotAngleDeg: 'Shot angle spread, °', motorSpreadPct: 'Motor-to-motor difference, %',
 };
 function initSettings() {
   $('setQuality').value = app.renderer.quality;

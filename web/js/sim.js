@@ -58,6 +58,10 @@ export class Simulation {
     for (const id of Object.keys(opts.robotCfg.wiring?.swapped || {})) if (this.robot.motors[id]) this.robot.motors[id].swapped = true;   // leads swapped at the hub
     // other robots on the field (alliance partner / opponent), driven from gamepad2 by the UI
     this.others = (opts.others || []).map(o => Object.assign(new Robot(R, this.world, o.cfg, placeAgainstWall(o.cfg, o.pose), opts.params || {}), { alliance: o.alliance }));
+    // no two motors are the same: a few % of free speed and gearbox loss, so open-loop "straight" slowly curves like a real robot
+    // (seeded per run; set when the field is reset)
+    const sp = (this.noise.motorSpreadPct ?? 0) / 100, gauss = () => (this.rng() + this.rng() + this.rng() - 1.5) * 2;
+    if (sp > 0) for (const rb of [this.robot, ...this.others]) for (const m of Object.values(rb.motors)) { m.freeScale *= 1 + gauss() * sp; m.eff *= 1 + gauss() * sp; }
     this.sensors = new SensorSuite(this);
     this.scorer = new Scorer(this);
     this.snapQueue = []; this.cmdQueue = [];

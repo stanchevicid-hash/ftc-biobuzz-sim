@@ -18,7 +18,7 @@ export function mechCommands(gp, robot) {
   const out = { motors: {}, servos: {} };
   if (H?.intake) out.motors[H.intake.device] = { mode: 'power', p: gp.right_trigger > 0.3 ? 1 : gp.left_trigger > 0.3 ? -1 : 0, brake: true };
   if (L) {
-    out.motors[L.flywheel] = st.fly ? { mode: 'velocity', tv: 3000 / 60 * robot.motors[L.flywheel].m.ticks, brake: false } : { mode: 'power', p: 0, brake: false };
+    out.motors[L.flywheel] = st.fly ? { mode: 'velocity', tv: 2700 / 60 * robot.motors[L.flywheel].m.ticks, brake: false } : { mode: 'power', p: 0, brake: false };
     if (L.hood) out.servos[L.hood.device] = { pos: st.hood };
     const sv = (cfg.servos || []).some(s => s.name === L.feed.device);
     const on = gp.right_bumper && st.fly;
@@ -32,7 +32,7 @@ export function mechCommands(gp, robot) {
 export function mechStatus(robot) {
   const L = (robot.cfg.launchers || [])[0], st = state.get(robot); if (!L) return null;
   const load = robot.cfg.motors.find(m => m.name === L.flywheel)?.load;
-  return { fly: !!st?.fly, rpm: Math.abs(load?.omega ?? 0) * 60 / (2 * Math.PI) * (load?.ratio ?? 1), target: 3000, hood: st?.hood };
+  return { fly: !!st?.fly, rpm: Math.abs(load?.omega ?? 0) * 60 / (2 * Math.PI) * (load?.ratio ?? 1), target: 2700, hood: st?.hood };
 }
 
 /** where the next ball would fly: launcher exit, hood pitch and the wheel's current surface speed, gravity and air drag */
@@ -46,14 +46,17 @@ export function predictArc(robot) {
   const rot = (v) => { const { w, x, y, z } = q, [vx, vy, vz] = v, tx = 2 * (y * vz - z * vy), ty = 2 * (z * vx - x * vz), tz = 2 * (x * vy - y * vx); return [vx + w * tx + (y * tz - z * ty), vy + w * ty + (z * tx - x * tz), vz + w * tz + (x * ty - y * tx)]; };
   const d = rot([0, Math.cos(pr), Math.sin(pr)]), p = robot.linkToWorld(L.link, L.exit);
   // the same drag and backspin lift as the ball bodies (field.js), for the next ball: a POLLEN
-  const pts = [], v = d.map(c => c * speed), dt = 0.01;
-  const w = launchSpin(d, speed, POLLEN_R, L.spin ?? 1), decay = Math.exp(-0.3 * dt);
+  // integrated at the physics rate (400 Hz, semi-implicit like Rapier), one point per 10 ms tick
+  const pts = [], v = d.map(c => c * speed), h = 0.0025;
+  const w = launchSpin(d, speed, POLLEN_R, L.spin ?? 1), decay = 1 / (1 + 0.3 * h);
   let x = [...p];
   for (let i = 0; i < 250 && x[2] > 0; i++) {
     pts.push([...x]);
-    const a = aeroAccel(v, w, POLLEN_R, POLLEN_MASS);
-    for (let k = 0; k < 3; k++) { v[k] += a[k] * dt; w[k] *= decay; }
-    v[2] -= 9.81 * dt; x = [x[0] + v[0] * dt, x[1] + v[1] * dt, x[2] + v[2] * dt];
+    for (let s = 0; s < 4; s++) {
+      const a = aeroAccel(v, w, POLLEN_R, POLLEN_MASS);
+      for (let k = 0; k < 3; k++) { v[k] += a[k] * h; w[k] *= decay; }
+      v[2] -= 9.81 * h; x = [x[0] + v[0] * h, x[1] + v[1] * h, x[2] + v[2] * h];
+    }
   }
   return pts;
 }

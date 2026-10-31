@@ -84,10 +84,10 @@ export class Bot {
       const s = this.shootSpot(sim), mine = spots[this.alliance] === this;
       move = mine ? this.driveTo(robot, s.x, s.y, s.h, 0.7) : this.driveTo(robot, s.x, s.y + (s.y > 0 ? -0.6 : 0.6), s.h, 0.7);
       if (!mine) move.dist = 1;
-      flywheel(3000); intake(false);
+      flywheel(2700); intake(false);
       const load = cfg.motors.find(m => m.name === L?.flywheel)?.load, wheelRpm = Math.abs(load?.omega ?? 0) * 60 / (2 * Math.PI);
       const still = Math.hypot(robot.body.linvel().x, robot.body.linvel().y) < 0.03;
-      if (L && still && move.dist < 0.04 && Math.abs(move.eh) < 0.03 && Math.abs(wheelRpm - 3000 / (load?.ratio ?? 1)) < 60) out.servos[L.feed.device] = { pos: 1 };
+      if (L && still && move.dist < 0.04 && Math.abs(move.eh) < 0.03 && Math.abs(wheelRpm - 2700 / (load?.ratio ?? 1)) < 60) out.servos[L.feed.device] = { pos: 1 };
       if (held === 0 && !H) this.state = 'seek';
     } else {
       const b = this.nearestBall(sim, P); this.target = b;

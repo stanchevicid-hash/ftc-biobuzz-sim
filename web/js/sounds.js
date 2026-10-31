@@ -1,8 +1,8 @@
 // Field audio cues (Competition Manual Table 9-1), synthesized with Web Audio so no sound files ship with the simulator.
 // Drive teams react to these sounds, so practising with them matters: the buzzer ends AUTO, bells start TELEOP,
 // the chime at 1:00 unlocks FLOWER scoring, the train whistle marks the last 20 s.
-let ctx = null, master = null, muted = false, volume = 0.35;   // quiet by default: the cues are loud on laptop speakers
-try { muted = localStorage.getItem('ftcsim.mute') === '1'; const v = parseFloat(localStorage.getItem('ftcsim.volume')); if (v >= 0 && v <= 1) volume = v; } catch { }
+let ctx = null, master = null, muted = true, volume = 0.35;   // off until the player turns it on, and quiet then
+try { muted = localStorage.getItem('ftcsim.sound') !== 'on'; const v = parseFloat(localStorage.getItem('ftcsim.volume')); if (v >= 0 && v <= 1) volume = v; } catch { }
 const ac = () => (ctx ||= new (window.AudioContext || window.webkitAudioContext)());
 const out = () => { if (!master) { master = ac().createGain(); master.gain.value = volume; master.connect(ac().destination); } return master; };
 
@@ -36,7 +36,7 @@ export function cue(name, ...args) {
   if (muted) return;
   try { ac().resume?.(); CUES[name]?.(...args); } catch { /* audio blocked until the first click: just skip */ }
 }
-export function setMuted(m) { muted = m; try { localStorage.setItem('ftcsim.mute', m ? '1' : '0'); } catch { } if (m) window.speechSynthesis?.cancel(); }
+export function setMuted(m) { muted = m; try { localStorage.setItem('ftcsim.sound', m ? 'off' : 'on'); } catch { } if (m) window.speechSynthesis?.cancel(); }
 export const isMuted = () => muted;
 export const getVolume = () => volume;
 export function setVolume(v) {

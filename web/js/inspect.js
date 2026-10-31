@@ -180,7 +180,7 @@ export function inspectStatic(cfg) {
 export async function inspectDynamic(R, cfg, onProgress = () => { }) {
   const out = [], add_ = (level, title, detail = '') => out.push({ level, title, detail });
   const tick = () => new Promise(r => setTimeout(r, 0));
-  const mk = () => new Simulation(R, { robotCfg: cfg, pose: { x: 0, y: -1.0, heading: 90 }, alliance: 'red', seed: 5, preload: 0 });
+  const mk = () => new Simulation(R, { robotCfg: cfg, pose: { x: 0, y: -1.0, heading: 90 }, alliance: 'red', seed: 5, preload: 0, noise: { motorSpreadPct: 0 } });
   const W = cfg.wheels || [];
   const drive = (sim, vx, vy, w, s) => {
     const ws = sim.robot.wheels.map(wh => { const v = [vx - w * wh.pos[1] * 4, vy + w * wh.pos[0] * 4], c = wh.fwd[0] * wh.d[0] + wh.fwd[1] * wh.d[1]; return (wh.d[0] * v[0] + wh.d[1] * v[1]) / (c || 1); });

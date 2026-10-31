@@ -3,7 +3,7 @@ import assert from 'assert';
 const RAPIER = (await import('../web/vendor/rapier/rapier.es.js')).default; await RAPIER.init();
 const B = await import('../web/js/bench.js'); const { DEMO_ROBOT } = await import('../web/js/robots/demo.js');
 
-const s = await B.shooterTest(RAPIER, DEMO_ROBOT, { distIn: 42, rpm: 3000, hood: 0.7, shots: 3 });
+const s = await B.shooterTest(RAPIER, DEMO_ROBOT, { distIn: 42, rpm: 2700, hood: 0.7, shots: 3 });
 assert.equal(s.rows.length, 3, 'fires every preloaded ball');
 assert.ok(s.spinUp > 0.5 && s.spinUp < 4, 'flywheel spin-up ' + s.spinUp);
 assert.ok(s.rows.every(r => r.rpmAfter < r.rpmBefore), 'each shot slows the flywheel');

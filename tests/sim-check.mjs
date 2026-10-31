@@ -23,12 +23,17 @@ sim = mk({ x: 0, y: -1.0, heading: 90 });
 drive(sim, 0, 1, 1.0); const vs = speed(sim); sim.destroy();
 check('strafe 75-92% of forward (mecanum rollers)', vs > 0.75 * vf && vs < 0.92 * vf, `${vs.toFixed(2)} m/s`);
 
-// 2. straight line: heading and lateral drift
-sim = mk({ x: 0, y: -1.2, heading: 90 });
-const h0 = sim.robot.pose().heading, x0 = sim.robot.body.translation().x;
-drive(sim, 0.6, 0, 1.5); drive(sim, 0, 0, 0.5);
-const dh = Math.abs(sim.robot.pose().heading - h0), dx = Math.abs(sim.robot.body.translation().x - x0) / IN; sim.destroy();
-check('drives straight', dh < 1.0 && dx < 1.0, `heading ${dh.toFixed(2)} deg, sideways ${dx.toFixed(2)} in`);
+// 2. straight line: identical motors drive straight; real (slightly different) motors curve a little, open loop
+const straight = (spread) => {
+  const s = new Simulation(RAPIER, { robotCfg: DEMO_ROBOT, pose: { x: 0, y: -1.2, heading: 90 }, alliance: 'red', seed: 1, noise: { motorSpreadPct: spread } });
+  const h0 = s.robot.pose().heading, x0 = s.robot.body.translation().x;
+  drive(s, 0.6, 0, 1.5); drive(s, 0, 0, 0.5);
+  const r = [Math.abs(s.robot.pose().heading - h0), Math.abs(s.robot.body.translation().x - x0) / IN]; s.destroy(); return r;
+};
+const [dh, dx] = straight(0);
+check('drives straight (identical motors)', dh < 1.0 && dx < 1.0, `heading ${dh.toFixed(2)} deg, sideways ${dx.toFixed(2)} in`);
+const [rh, rx] = straight(1.5);
+check('real motors curve a little', rh > 0.1 && rh < 10 && rx < 6, `heading ${rh.toFixed(2)} deg, sideways ${rx.toFixed(2)} in over ~1.4 m`);
 
 // 3. starting against the wall: touching it, no creep while parked
 sim = mk(START_POSES['Red - audience side']);
@@ -66,6 +71,30 @@ const before = sim.robot.body.translation().y;
 for (let k = 0; k < 150; k++) { sim.others[0].applyCommands({ motors: Object.fromEntries(W.map((n, i) => [n, { mode: 'power', p: 1 * DIR[i], brake: true }])) }); sim.tick(); }
 const pushed = (sim.robot.body.translation().y - before) / IN; sim.destroy();
 check('opponent pushes a braked robot', pushed > 3, `pushed ${pushed.toFixed(1)} in`);
+
+// 7. the arc drawn for the driver is where the ball really flies (same drag and backspin lift), spread off
+{
+  const { mechCommands, predictArc } = await import('../web/js/manual.js');
+  const s = new Simulation(RAPIER, { robotCfg: DEMO_ROBOT, pose: { x: -1.5, y: -1.2, heading: 0 }, alliance: 'red', seed: 1,
+    noise: { shotSpeedPct: 0, shotAngleDeg: 0, motorSpreadPct: 0 } });
+  s.setCommands(mechCommands({ a: true }, s.robot)); s.tick();
+  for (let k = 0; k < 300; k++) { s.setCommands(mechCommands({}, s.robot)); s.tick(); }
+  let arc = null, ball = null, held = new Set(s.balls.filter(b => b.held).map(b => b.id));
+  for (let k = 0; k < 100 && !ball; k++) {
+    arc = predictArc(s.robot);
+    s.setCommands(mechCommands({ right_bumper: true }, s.robot)); s.tick();
+    ball = s.balls.find(b => held.has(b.id) && !b.held);
+  }
+  // the arc starts at the exit one tick before the release: compare the next 40 ticks (0.4 s, ~2.5 m of flight)
+  let worst = 0;
+  for (let i = 1; i <= 40 && ball; i++) {
+    const p = ball.body.translation(), a = arc[i]; if (!a) break;
+    worst = Math.max(worst, Math.hypot(p.x - a[0], p.y - a[1], p.z - a[2]));
+    s.setCommands(mechCommands({}, s.robot)); s.tick();
+  }
+  check("predicted arc matches the flight", ball && worst < 0.02, `largest gap ${(worst * 100).toFixed(1)} cm over 0.4 s`);
+  s.destroy();
+}
 
 console.log(failed ? `\n${failed} check(s) FAILED` : '\nall checks passed');
 process.exit(failed ? 1 : 0);
