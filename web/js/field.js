@@ -5,6 +5,23 @@ export const FIELD_HALF = 72 * IN;          // 144 in inside the perimeter
 export const WALL_H = 12.25 * IN;
 export const POLLEN_R = 2.8 / 2 * IN, NECTAR_R = 3.6 / 2 * IN;
 export const POLLEN_MASS = 0.028, NECTAR_MASS = 0.055;   // kg, estimated (Gopher ResisDent hollow PE balls)
+
+// Ball aerodynamics, shared by the physics and the predicted arc so the drawn path is the flown path.
+// Smooth sphere at Re ~ 3e4: Cd ~ 0.47. Lift from spin (Magnus): CL = 1 / (2 + 1/S), S = r*w/v (Clanet's fit).
+const RHO = 1.2, CD = 0.47;
+export function aeroAccel(v, w, r, mass) {
+  const s = Math.hypot(v[0], v[1], v[2]); if (s < 0.05) return [0, 0, 0];
+  const k = 0.5 * RHO * Math.PI * r * r * s / mass;          // times v (or v-sized vector) gives the acceleration
+  const wn = Math.hypot(w[0], w[1], w[2]), S = r * wn / s;
+  const kl = wn > 1e-6 && S > 1e-4 ? k / (2 + 1 / S) / wn : 0;  // lift along w x v, |w x v| = wn*s for a perpendicular spin
+  return [0, 1, 2].map(i => -k * CD * v[i] + kl * (w[(i + 1) % 3] * v[(i + 2) % 3] - w[(i + 2) % 3] * v[(i + 1) % 3]));
+}
+/** backspin of a ball leaving a hooded flywheel: it rolls on the hood, so w = v / r, about the axis that gives lift */
+export function launchSpin(dir, speed, r, factor = 1) {
+  const a = [dir[1], -dir[0], 0], n = Math.hypot(a[0], a[1]) || 1;   // dir x up
+  return a.map(c => c / n * speed / r * factor);
+}
+export const ROLL_DECEL = 0.25;   // m/s^2, a plastic ball rolling on foam tiles
 export const GROUP = { FIELD: 1, ROBOT: 2, BALL: 4, LINK: 8, HELD: 16 };
 export const groups = (member, filter) => (member << 16) | filter;
 

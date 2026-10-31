@@ -43,6 +43,7 @@ export function initMenu(app, { switchTab, game }) {
       <a class="menu-asa" href="https://www.instagram.com/asa.ftc_md/" target="_blank" rel="noopener" title="Made by ASA, FTC team 28284">
         <img src="assets/asa-logo.webp" alt="ASA" width="44" height="44"><span>Made by <b>ASA</b><small>FTC 28284</small></span></a>
       <nav class="menu-social follow" aria-label="Follow ASA"><span>Follow us</span>${SOCIAL}</nav>
+      <button class="sound-toggle"></button>
       <button id="menuTeamBtn" title="Change team or name"></button>
       <button data-dlg="teams">Teams</button>
       <button data-dlg="help">Help</button>
@@ -50,7 +51,7 @@ export function initMenu(app, { switchTab, game }) {
     </div>
     <dialog id="menuDlg" class="menu-dlg"><form method="dialog"><h2></h2><div class="dlg-body"></div><button class="primary">Close</button></form></dialog>`;
   // every section: follow links in the top bar
-  document.getElementById('server').insertAdjacentHTML('beforebegin', `<nav class="follow top-follow" aria-label="Follow ASA"><span>Follow us</span>${SOCIAL}</nav>`);
+  document.getElementById('topSound').insertAdjacentHTML('beforebegin',`<nav class="follow top-follow" aria-label="Follow ASA"><span>Follow us</span>${SOCIAL}</nav>`);
   const form = el.querySelector('#menuTeam'), teamIn = el.querySelector('#teamNo'), nameIn = el.querySelector('#teamName');
   let player = '';
   // /api/teams: local Java server (data/teams.json) or the Netlify function (Blobs); null when neither answers

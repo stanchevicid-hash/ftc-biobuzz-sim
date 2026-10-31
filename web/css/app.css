@@ -505,3 +505,7 @@ g.port.hover rect:first-child { fill: rgba(242, 169, 0, .25); }
 @keyframes burst { from { transform: scale(.3); opacity: 0; } 40% { opacity: 1; } to { transform: scale(1); opacity: .9; } }
 @keyframes star-in { from { transform: scale(0) rotate(-30deg); } to { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .win .burst, .win b span { animation: none; } }
+.top-sound { display: grid; place-items: center; width: 30px; height: 30px; min-height: 0; padding: 0; border-radius: 50%; background: none; border: 1px solid var(--line); color: var(--dim); }
+.top-sound:hover, .top-sound:focus-visible { color: #fff; border-color: var(--honey); }
+.top-sound:not(.on) { color: #ff6b6b; border-color: #ff6b6b66; }
+.top-sound .ico { width: 16px; height: 16px; }

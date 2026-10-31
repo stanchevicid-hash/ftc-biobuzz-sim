@@ -16,6 +16,7 @@ export const DEFAULT_NOISE = {
   colorNoise: 0.01,
   tagPosNoise: 0.004, tagAngNoiseDeg: 0.4,          // meters / deg at 1 m, grows with distance^2
   encoderNoiseTicks: 0, pinpointNoise: 0.0005,
+  shotSpeedPct: 1.5, shotAngleDeg: 0.4,             // shot-to-shot spread (1 sigma): ball compression, feed timing
 };
 
 /** Control Hub mounting on the robot (hub +Z = logo side, hub +Y = USB side), as a quaternion; logo UP + USB FORWARD = identity */

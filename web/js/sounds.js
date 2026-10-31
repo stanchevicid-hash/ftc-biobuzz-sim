@@ -1,9 +1,10 @@
 // Field audio cues (Competition Manual Table 9-1), synthesized with Web Audio so no sound files ship with the simulator.
 // Drive teams react to these sounds, so practising with them matters: the buzzer ends AUTO, bells start TELEOP,
 // the chime at 1:00 unlocks FLOWER scoring, the train whistle marks the last 20 s.
-let ctx = null, muted = false;
-try { muted = localStorage.getItem('ftcsim.mute') === '1'; } catch { }
+let ctx = null, master = null, muted = false, volume = 0.35;   // quiet by default: the cues are loud on laptop speakers
+try { muted = localStorage.getItem('ftcsim.mute') === '1'; const v = parseFloat(localStorage.getItem('ftcsim.volume')); if (v >= 0 && v <= 1) volume = v; } catch { }
 const ac = () => (ctx ||= new (window.AudioContext || window.webkitAudioContext)());
+const out = () => { if (!master) { master = ac().createGain(); master.gain.value = volume; master.connect(ac().destination); } return master; };
 
 function tone(freq, start, dur, { type = 'sine', gain = 0.25, attack = 0.01, release = 0.15, slideTo = null, vibrato = 0 } = {}) {
   const a = ac(), t0 = a.currentTime + start, o = a.createOscillator(), g = a.createGain();
@@ -12,7 +13,7 @@ function tone(freq, start, dur, { type = 'sine', gain = 0.25, attack = 0.01, rel
   if (vibrato) { const l = a.createOscillator(), lg = a.createGain(); l.frequency.value = 6; lg.gain.value = vibrato; l.connect(lg).connect(o.frequency); l.start(t0); l.stop(t0 + dur + release); }
   g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(gain, t0 + attack);
   g.gain.setValueAtTime(gain, t0 + Math.max(attack, dur - release)); g.gain.linearRampToValueAtTime(0, t0 + dur);
-  o.connect(g).connect(a.destination); o.start(t0); o.stop(t0 + dur + 0.05);
+  o.connect(g).connect(out()); o.start(t0); o.stop(t0 + dur + 0.05);
 }
 const bell = (f, at) => { tone(f, at, 1.6, { gain: 0.22, attack: 0.002, release: 1.5 }); tone(f * 2.76, at, 0.9, { gain: 0.06, attack: 0.002, release: 0.85 }); };
 
@@ -26,7 +27,7 @@ const CUES = {
   foghorn() { tone(70, 0, 1.8, { type: 'sawtooth', gain: 0.18, slideTo: 62 }); },
   pickUp() {
     if (!window.speechSynthesis) return;
-    const u = new SpeechSynthesisUtterance('Drivers, pick up your controllers. 3, 2, 1'); u.rate = 1.05; u.lang = 'en-US';
+    const u = new SpeechSynthesisUtterance('Drivers, pick up your controllers. 3, 2, 1'); u.rate = 1.05; u.lang = 'en-US'; u.volume = volume;
     speechSynthesis.cancel(); speechSynthesis.speak(u);
   },
 };
@@ -37,3 +38,8 @@ export function cue(name, ...args) {
 }
 export function setMuted(m) { muted = m; try { localStorage.setItem('ftcsim.mute', m ? '1' : '0'); } catch { } if (m) window.speechSynthesis?.cancel(); }
 export const isMuted = () => muted;
+export const getVolume = () => volume;
+export function setVolume(v) {
+  volume = Math.max(0, Math.min(1, v)); if (master) master.gain.value = volume;
+  try { localStorage.setItem('ftcsim.volume', String(volume)); } catch { }
+}

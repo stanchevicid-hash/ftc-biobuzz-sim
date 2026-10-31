@@ -26,6 +26,7 @@
     <button data-tab="settings">Settings</button>
     <button data-tab="help">Help</button>
   </nav>
+  <button id="topSound" class="sound-toggle icon top-sound" aria-label="Sound"></button>
   <div id="server" class="bridge">Connecting…</div>
 </header>
 
@@ -183,6 +184,7 @@
         <div class="grid2">
           <label>Graphics <select id="setQuality"><option value="ultra">Ultra</option><option value="high">High</option><option value="low">Low</option></select></label>
           <label>Sound <select id="setSound"><option value="on">On</option><option value="off">Off</option></select></label>
+          <label>Volume <input id="setVolume" type="range" min="0" max="100" step="5"></label>
         </div>
       </section>
       <section class="block">

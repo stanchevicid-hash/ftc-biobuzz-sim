@@ -151,15 +151,32 @@ export class Renderer {
     return { root, links, update() { for (const { g, w } of wheels) g.rotation.x = -robot.wheels.find(x => x.motor === w.motor).angle; } };
   }
 
-  sync() {
+  /** called right before every physics tick: the pose each body had, so frames can be drawn between two ticks */
+  capturePrev() {
+    const sim = this.sim; if (!sim) return;
+    const prev = new Map(), keep = (body) => { const p = body.translation(), q = body.rotation(); prev.set(body, [p.x, p.y, p.z, q.x, q.y, q.z, q.w]); };
+    for (const b of sim.balls) keep(b.body);
+    for (const r of [sim.robot, ...sim.others]) { keep(r.body); for (const L of Object.values(r.links)) keep(L.body); }
+    this.prev = prev;
+  }
+
+  sync(alpha = 1) {
     const sim = this.sim; if (!sim) return;
     this.fieldV.update();
+    // physics runs in 10 ms ticks, the screen at 60-144 Hz: drawing the latest tick makes motion judder (1 tick, 2 ticks, 1...)
+    const qa = this._qa ??= new THREE.Quaternion(), qb = this._qb ??= new THREE.Quaternion();
+    const setT = (o, body) => {
+      const p = body.translation(), q = body.rotation(), a = this.prev?.get(body);
+      if (!a || alpha >= 1) { o.position.set(p.x, p.y, p.z); o.quaternion.set(q.x, q.y, q.z, q.w); return; }
+      o.position.set(a[0] + (p.x - a[0]) * alpha, a[1] + (p.y - a[1]) * alpha, a[2] + (p.z - a[2]) * alpha);
+      o.quaternion.copy(qa.set(a[3], a[4], a[5], a[6]).slerp(qb.set(q.x, q.y, q.z, q.w), alpha));
+    };
     for (const b of sim.balls) {
       let m = this.ballMeshes.get(b);
       if (!m) { m = new THREE.Mesh(this.ballGeo[b.type], this.ballMat[b.color]); m.castShadow = m.receiveShadow = true; this.dyn.add(m); this.ballMeshes.set(b, m); }
-      const p = b.body.translation(), q = b.body.rotation(); m.position.set(p.x, p.y, p.z); m.quaternion.set(q.x, q.y, q.z, q.w);
+      setT(m, b.body);
     }
-    const r = sim.robot, setT = (o, body) => { const p = body.translation(), q = body.rotation(); o.position.set(p.x, p.y, p.z); o.quaternion.set(q.x, q.y, q.z, q.w); };
+    const r = sim.robot;
     for (const { robot, v } of [{ robot: r, v: this.robotV }, ...(this.otherVs || [])]) {
       setT(v.root, robot.body);
       for (const [id, g] of Object.entries(v.links)) if (robot.links[id]) setT(g, robot.links[id].body);
@@ -230,11 +247,11 @@ export class Renderer {
     if (m !== 'robot') this.frame(); else this.controls.update();
   }
 
-  render(tagView) {
-    this.resize(); this.sync();
+  render(tagView, alpha = 1) {
+    this.resize(); this.sync(alpha);
     const sim = this.sim;
     if (this.mode === 'robot' && sim) {
-      const p = sim.robot.body.translation(), f = qRotate(sim.robot.body.rotation(), [0, 1, 0]);
+      const o = this.robotV.root, p = o.position, qo = o.quaternion, f = qRotate({ x: qo.x, y: qo.y, z: qo.z, w: qo.w }, [0, 1, 0]);
       const want = new THREE.Vector3(p.x - f[0] * 1.1, p.y - f[1] * 1.1, 0.75);
       this.cam.position.lerp(want, 0.15); this.controls.target.set(p.x + f[0] * 0.5, p.y + f[1] * 0.5, 0.25); this.cam.lookAt(this.controls.target);
     } else this.controls.update();

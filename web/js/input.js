@@ -10,13 +10,16 @@ const empty = () => ({ left_stick_x: 0, left_stick_y: 0, right_stick_x: 0, right
 /** keyboard layout used as gamepad1 when no physical gamepad is assigned */
 export const KEY_HELP = 'WASD left stick, arrows right stick (left/right turns), hold Shift for 40% stick, I J K L d-pad, 1 2 3 4 for A B X Y, Q E bumpers, Z C triggers, Enter start, Backspace back.';
 
+// keys are on/off, a thumb is not: the "stick" travels to the key's value in ~0.12 s, and W+D stays inside the stick's circle
+const STICK_TRAVEL_S = 0.12, AXES = ['left_stick_x', 'left_stick_y', 'right_stick_x', 'right_stick_y'];
+const stick = { left_stick_x: 0, left_stick_y: 0, right_stick_x: 0, right_stick_y: 0, t: 0 };
 function fromKeyboard() {
   const g = empty(), k = (c) => keys.has(c) ? 1 : 0;
-  g.left_stick_x = k('KeyD') - k('KeyA');
-  g.left_stick_y = k('KeyS') - k('KeyW');
-  g.right_stick_x = k('ArrowRight') - k('ArrowLeft');
-  g.right_stick_y = k('ArrowDown') - k('ArrowUp');
-  if (keys.has('ShiftLeft') || keys.has('ShiftRight')) for (const a of ['left_stick_x', 'left_stick_y', 'right_stick_x', 'right_stick_y']) g[a] *= 0.4;   // precise driving
+  const want = { left_stick_x: k('KeyD') - k('KeyA'), left_stick_y: k('KeyS') - k('KeyW'), right_stick_x: k('ArrowRight') - k('ArrowLeft'), right_stick_y: k('ArrowDown') - k('ArrowUp') };
+  const len = Math.hypot(want.left_stick_x, want.left_stick_y); if (len > 1) { want.left_stick_x /= len; want.left_stick_y /= len; }
+  if (keys.has('ShiftLeft') || keys.has('ShiftRight')) for (const a of AXES) want[a] *= 0.4;   // precise driving
+  const now = performance.now() / 1000, step = Math.min(1, (now - stick.t) / STICK_TRAVEL_S); stick.t = now;
+  for (const a of AXES) { stick[a] += Math.max(-step, Math.min(step, want[a] - stick[a])); g[a] = Math.abs(stick[a]) < 1e-3 ? 0 : stick[a]; }
   g.left_trigger = k('KeyZ'); g.right_trigger = k('KeyC');
   Object.assign(g, { a: !!k('Digit1'), b: !!k('Digit2'), x: !!k('Digit3'), y: !!k('Digit4'), left_bumper: !!k('KeyQ'), right_bumper: !!k('KeyE'),
     dpad_up: !!k('KeyI'), dpad_down: !!k('KeyK'), dpad_left: !!k('KeyJ'), dpad_right: !!k('KeyL'), start: !!k('Enter'), back: !!k('Backspace'), connected: true, keyboard: true });

@@ -16,11 +16,11 @@ import { initLab } from './lab.js';
 import { initDriverHub } from './driverhub.js';
 import { initGame } from './game.js';
 import { initMenu } from './menu.js';
-import { iconizeToolbar, setPauseIcon } from './icons.js';
+import { iconizeToolbar, setPauseIcon, ICON } from './icons.js';
 import { mechCommands, mechStatus, predictArc } from './manual.js';
 import { DEFAULT_NOISE } from './sensors.js';
 import { missingNames, suggest } from './names.js';
-import { cue, setMuted, isMuted } from './sounds.js';
+import { cue, setMuted, isMuted, getVolume, setVolume } from './sounds.js';
 
 const $ = (id) => document.getElementById(id);
 const LS = { get: (k, d) => { try { const v = localStorage.getItem('ftcsim.' + k); return v ? JSON.parse(v) : d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem('ftcsim.' + k, JSON.stringify(v)); } catch { } } };
@@ -89,6 +89,7 @@ async function physicsLoop() {
         try { await doTick(); } catch (e) { console.error(e); acc = 0; } finally { app.ticking = false; }
         acc -= TICK; flushRetired();
       }
+      app.alpha = acc / TICK;                   // how far the clock is into the next tick: frames draw between two ticks
     } else acc = 0;
     flushRetired();
     last = now;
@@ -98,13 +99,17 @@ async function physicsLoop() {
 
 function manualCommands(gp, robot = app.sim.robot) {
   // drive any drivetrain from the stick: required wheel surface speed for the requested chassis motion
-  const sim = { robot }, vx = gp.left_stick_x, vy = -gp.left_stick_y, w = -gp.right_stick_x * 2.2;
-  const out = { motors: {} };
-  const ws = sim.robot.wheels.map(wh => {
+  const sim = { robot }, vx = gp.left_stick_x, vy = -gp.left_stick_y;
+  const wheelSpeed = (wh, vx, vy, w) => {
     const v = [vx - w * wh.pos[1], vy + w * wh.pos[0]];
     const c = wh.fwd[0] * wh.d[0] + wh.fwd[1] * wh.d[1];
     return (wh.d[0] * v[0] + wh.d[1] * v[1]) / (c || 1);
-  });
+  };
+  // full right stick alone = full power on the wheels, like rx in a usual mecanum TeleOp
+  const rot1 = Math.max(1e-6, ...robot.wheels.map(wh => Math.abs(wheelSpeed(wh, 0, 0, 1))));
+  const w = -gp.right_stick_x / rot1;
+  const out = { motors: {} };
+  const ws = sim.robot.wheels.map(wh => wheelSpeed(wh, vx, vy, w));
   const mx = Math.max(1, ...ws.map(Math.abs));
   sim.robot.wheels.forEach((wh, i) => { out.motors[wh.motor] = { mode: 'power', p: ws[i] / mx * (wh.motorDir ?? 1), brake: true }; });
   const m = mechCommands(gp, robot);                    // intake, flywheel, hood, feeder without code
@@ -127,6 +132,7 @@ async function doTick() {
     sim.setCommands(manualCommands(readGamepads()[0]));
   } else sim.setCommands({});
   if (sim.others.length) { const g2 = readGamepads()[1]; for (const o of sim.others) o.applyCommands(o.bot ? o.bot.step(sim, o) : manualCommands(g2, o)); }
+  app.renderer.capturePrev();
   sim.tick();
   app.onTick?.(sim);
   app.rec.capture(sim, { phase: app.match.phase, op: app.op.state, tele: app.lastTele });
@@ -435,13 +441,22 @@ function frame() {
   if (app.replay) replayStep(dt);
   if (app.renderer.trail && app.rec.trail.length !== trailLen) { trailLen = app.rec.trail.length; app.renderer.setTrail(app.rec.trail); }
   app.renderer.setArc(app.sim ? predictArc(app.sim.robot) : null);
-  app.renderer.render(app.tagView); hud(); if ($('graphBox').open) graph.draw(); requestAnimationFrame(frame);
+  app.renderer.render(app.tagView, app.running && !app.replay && !app.batch ? Math.min(1, app.alpha ?? 1) : 1); hud(); if ($('graphBox').open) graph.draw(); requestAnimationFrame(frame);
 }
 
 // ------------------------------------------------------------------ trail, CSV log, replay
-const showSound = () => { $('soundBtn').classList.toggle('on', !isMuted()); $('soundBtn').setAttribute('aria-pressed', String(!isMuted())); };
+const showSound = () => {
+  const on = !isMuted();
+  document.querySelectorAll('.sound-toggle').forEach(b => {
+    b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); b.title = on ? 'Sound on (click to mute)' : 'Sound off (click to turn on)';
+    if (b.classList.contains('icon')) b.innerHTML = on ? ICON.sound : ICON.soundOff; else b.textContent = on ? 'Sound on' : 'Sound off';
+  });
+  if ($('setSound')) $('setSound').value = on ? 'on' : 'off';
+};
 showSound();
-$('soundBtn').onclick = () => { setMuted(!isMuted()); showSound(); if (!isMuted()) cue('chime'); };
+// every sound switch (top bar, menu, toolbar) toggles the same setting
+$('soundBtn').classList.add('sound-toggle');
+document.addEventListener('click', (e) => { if (!e.target.closest('.sound-toggle')) return; setMuted(!isMuted()); showSound(); if (!isMuted()) cue('chime'); });
 $('keysBtn').onclick =() => { const h = $('keys').classList.toggle('hidden'); $('keysBtn').classList.toggle('on', !h); $('keysBtn').setAttribute('aria-expanded', String(!h)); };
 $('hud').onclick = () => $('scoreTable').classList.toggle('hidden');
 $('trailBtn').onclick = () => { app.renderer.showTrail = !(app.renderer.showTrail ?? true); app.renderer.trail.visible = app.renderer.showTrail; $('trailBtn').classList.toggle('on', app.renderer.showTrail); };
@@ -476,6 +491,7 @@ const NOISE_LABEL = {
   sensorDelayMs: 'Sensor delay, ms', actuatorDelayMs: 'Command delay, ms', imuNoiseDeg: 'IMU noise, °', imuDriftDegPerMin: 'IMU drift, °/min',
   distNoiseFrac: 'Distance noise, ×', distNoiseMm: 'Distance noise, mm', colorNoise: 'Color noise',
   tagPosNoise: 'Tag position noise, m', tagAngNoiseDeg: 'Tag angle noise, °', encoderNoiseTicks: 'Encoder noise, ticks', pinpointNoise: 'Pinpoint noise, m',
+  shotSpeedPct: 'Shot speed spread, %', shotAngleDeg: 'Shot angle spread, °',
 };
 function initSettings() {
   $('setQuality').value = app.renderer.quality;
@@ -483,7 +499,9 @@ function initSettings() {
   $('quality').addEventListener('change', () => { $('setQuality').value = $('quality').value; });
   $('setSound').value = isMuted() ? 'off' : 'on';
   $('setSound').onchange = () => { setMuted($('setSound').value === 'off'); showSound(); };
-  $('soundBtn').addEventListener('click', () => { $('setSound').value = isMuted() ? 'off' : 'on'; });
+  $('setVolume').value = Math.round(getVolume() * 100);
+  $('setVolume').oninput = () => setVolume($('setVolume').value / 100);
+  $('setVolume').onchange = () => { if (!isMuted()) cue('chime'); };
   const form = () => {
     $('noiseForm').innerHTML = Object.keys(DEFAULT_NOISE).map(k => `<label>${esc(NOISE_LABEL[k] || k)} <input type="number" step="any" min="0" data-k="${esc(k)}" value="${app.noise[k] ?? DEFAULT_NOISE[k]}"></label>`).join('');
     $('noiseForm').querySelectorAll('input').forEach(i => i.onchange = () => {
@@ -516,7 +534,7 @@ initDriverHub(app, $, openWiring);
 const game = initGame(app, $('gameBox'));
 initMenu(app, { switchTab, game });
 iconizeToolbar(); setPauseIcon(true);
-initSettings();
+initSettings(); showSound();   // after the menu and the toolbar icons exist
 $('robotNav').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; $('robotNav').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); for (const id of ['robotSetup', 'robotWiring', 'p-calib']) $(id).classList.toggle('hidden', id !== b.dataset.r); if (b.dataset.r === 'robotWiring') lab.render(); };
 setServer(await bridge.online());
 if (app.serverOk) { if (!app.files) await loadExamples(true); else showFile(); build(); } else { app.files = app.files || []; showFile(); }

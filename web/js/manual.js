@@ -2,6 +2,8 @@
 // plus the predicted flight of the next ball so a driver can learn to aim.
 //   right trigger (C) intake     left trigger (Z) spit out     A (1) flywheel on / off
 //   right bumper (E) shoot       d-pad up / down (I / K) hood
+import { aeroAccel, launchSpin, POLLEN_R, POLLEN_MASS } from './field.js';
+
 const state = new WeakMap();
 
 export function mechCommands(gp, robot) {
@@ -43,11 +45,14 @@ export function predictArc(robot) {
   const body = robot.linkBody(L.link), q = body.rotation(), pr = pitch * Math.PI / 180;
   const rot = (v) => { const { w, x, y, z } = q, [vx, vy, vz] = v, tx = 2 * (y * vz - z * vy), ty = 2 * (z * vx - x * vz), tz = 2 * (x * vy - y * vx); return [vx + w * tx + (y * tz - z * ty), vy + w * ty + (z * tx - x * tz), vz + w * tz + (x * ty - y * tx)]; };
   const d = rot([0, Math.cos(pr), Math.sin(pr)]), p = robot.linkToWorld(L.link, L.exit);
+  // the same drag and backspin lift as the ball bodies (field.js), for the next ball: a POLLEN
   const pts = [], v = d.map(c => c * speed), dt = 0.01;
+  const w = launchSpin(d, speed, POLLEN_R, L.spin ?? 1), decay = Math.exp(-0.3 * dt);
   let x = [...p];
   for (let i = 0; i < 250 && x[2] > 0; i++) {
     pts.push([...x]);
-    for (let k = 0; k < 3; k++) v[k] *= (1 - 0.15 * dt);       // same linear damping as the ball bodies
+    const a = aeroAccel(v, w, POLLEN_R, POLLEN_MASS);
+    for (let k = 0; k < 3; k++) { v[k] += a[k] * dt; w[k] *= decay; }
     v[2] -= 9.81 * dt; x = [x[0] + v[0] * dt, x[1] + v[1] * dt, x[2] + v[2] * dt];
   }
   return pts;

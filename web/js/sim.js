@@ -1,5 +1,5 @@
 // Simulation core: Rapier world + BIOBUZZ field + robot + game pieces. No rendering here (used headless for batch runs).
-import { buildFieldPhysics, stepHives, initialBalls, GROUP, groups, POLLEN_R, NECTAR_R, POLLEN_MASS, NECTAR_MASS, ZONES, IN, FIELD_HALF } from './field.js';
+import { buildFieldPhysics, stepHives, initialBalls, GROUP, groups, POLLEN_R, NECTAR_R, POLLEN_MASS, NECTAR_MASS, ZONES, IN, FIELD_HALF, aeroAccel, ROLL_DECEL } from './field.js';
 import { Robot } from './robot.js';
 import { Battery, MOTORS } from './motors.js';
 import { harness, defaultModel } from './wiring.js';
@@ -73,12 +73,14 @@ export class Simulation {
         this.grab(ball, store, rb); store.balls.push(ball);
       }
     }
-    this.ctx = { balls: this.balls, grab: (b, h, r) => this.grab(b, h, r), release: (b, v, p) => this.release(b, v, p) };
+    this.ctx = { balls: this.balls, grab: (b, h, r) => this.grab(b, h, r), release: (b, v, p, w) => this.release(b, v, p, w),
+      rng: this.rng, noise: () => this.noise };
   }
 
   addBall(type, color, pos) {
     const R = this.R, r = type === 'pollen' ? POLLEN_R : NECTAR_R, mass = type === 'pollen' ? POLLEN_MASS : NECTAR_MASS;
-    const body = this.world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(...pos).setLinearDamping(0.15).setAngularDamping(0.6).setCcdEnabled(true));
+    // air drag, spin lift and rolling resistance are applied in tick(); the small angular damping is spin decay
+    const body = this.world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(...pos).setAngularDamping(0.3).setCcdEnabled(true));
     const vol = 4 / 3 * Math.PI * r ** 3;
     const col = this.world.createCollider(R.ColliderDesc.ball(r).setDensity(mass / vol).setFriction(this.opts.params?.ballFriction ?? 0.5).setRestitution(0.45)
       .setCollisionGroups(groups(GROUP.BALL, 0xffff & ~GROUP.HELD)), body);
@@ -92,12 +94,12 @@ export class Simulation {
     ball.body.setBodyType(this.R.RigidBodyType.KinematicPositionBased, true);
     ball.col.setCollisionGroups(groups(GROUP.HELD, 0));
   }
-  release(ball, vel, pos) {
+  release(ball, vel, pos, spin = [0, 0, 0]) {
     ball.held = false;
     ball.body.setBodyType(this.R.RigidBodyType.Dynamic, true);
     ball.body.setTranslation({ x: pos[0], y: pos[1], z: pos[2] }, true);
     ball.body.setLinvel({ x: vel[0], y: vel[1], z: vel[2] }, true);
-    ball.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    ball.body.setAngvel({ x: spin[0], y: spin[1], z: spin[2] }, true);
     ball.col.setCollisionGroups(groups(GROUP.BALL, 0xffff & ~GROUP.HELD));
   }
 
@@ -154,6 +156,7 @@ export class Simulation {
       const amps = this.robot.step(dt, this.battery.v, this.ctx);
       for (const o of this.others) o.step(dt, 12.8, this.ctx);
       this.battery.update(amps + 0.6, dt);       // + Control Hub / sensors
+      this.ballForces(dt);
       this.world.step();
       this.t += dt;
     }
@@ -169,6 +172,20 @@ export class Simulation {
       if (n > 0) { this.hp.allowed[h.alliance] += n; this.lastTips[i] = h.tips.length; }
     });
     if (this.hp.auto) for (const a of ['red', 'blue']) if (this.hp.allowed[a] > 0 && this.hp[a] > 0) this.humanPlayerNectar(a);
+  }
+  /** quadratic air drag and Magnus lift on every free ball; on the tiles, rolling resistance instead of a constant damping */
+  ballForces(dt) {
+    for (const b of this.balls) {
+      if (b.held || b.body.isSleeping()) continue;
+      const lv = b.body.linvel(), v = [lv.x, lv.y, lv.z], av = b.body.angvel();
+      const a = aeroAccel(v, [av.x, av.y, av.z], b.r, b.mass);
+      const sp = Math.hypot(v[0], v[1]);
+      if (b.body.translation().z < b.r + 0.003 && Math.abs(v[2]) < 0.3 && sp > 1e-3) {
+        const d = Math.min(ROLL_DECEL * dt, sp);                // never reverses the ball
+        a[0] -= d / dt * v[0] / sp; a[1] -= d / dt * v[1] / sp;
+      }
+      b.body.applyImpulse({ x: a[0] * b.mass * dt, y: a[1] * b.mass * dt, z: a[2] * b.mass * dt }, false);
+    }
   }
   humanPlayerNectar(a) {
     if (this.hp[a] <= 0) return false;

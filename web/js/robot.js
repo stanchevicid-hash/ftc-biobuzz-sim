@@ -1,6 +1,6 @@
 // Robot physics built from a robot config (see robots/demo.js for the format).
 // Robot frame (FTC convention): +X right, +Y forward, +Z up, origin on the floor under the chassis center.
-import { GROUP, groups, qRotate, qMul, qConj, qAxis, IN } from './field.js';
+import { GROUP, groups, qRotate, qMul, qConj, qAxis, IN, launchSpin } from './field.js';
 import { Motor, Servo, MOTORS, SERVOS } from './motors.js';
 
 const G = 9.81;
@@ -376,15 +376,18 @@ export class Robot {
       let pitch = L.pitchDeg ?? 45;
       if (L.hood) { const sp = this.servoPos(L.hood.device); if (sp != null) pitch = L.hood.min + (L.hood.max - L.hood.min) * sp; }
       const body = this.linkBody(L.link);
-      const pr = pitch * Math.PI / 180;
-      const dirLocal = [0, Math.cos(pr), Math.sin(pr)];
+      // shot-to-shot spread (seeded, so a run repeats): ball compression and feed timing change speed and angle a little
+      const N = ctx.noise?.() || {}, gauss = () => ctx.rng ? (ctx.rng() + ctx.rng() + ctx.rng() - 1.5) * 2 : 0;
+      const dA = (N.shotAngleDeg ?? 0) * Math.PI / 180;
+      const pr = pitch * Math.PI / 180 + gauss() * dA, yw = gauss() * dA;
+      const dirLocal = [-Math.cos(pr) * Math.sin(yw), Math.cos(pr) * Math.cos(yw), Math.sin(pr)];
       const dirW = qRotate(body.rotation(), dirLocal);
-      const speed = surf * (L.speedFactor ?? 0.5) * (ball.type === 'nectar' ? (L.nectarFactor ?? 0.9) : 1);
+      const speed = surf * (L.speedFactor ?? 0.5) * (ball.type === 'nectar' ? (L.nectarFactor ?? 0.9) : 1) * (1 + gauss() * (N.shotSpeedPct ?? 0) / 100);
       const exitW = this.linkToWorld(L.link, L.exit);
-      ctx.release(ball, add(this.pointVelOf(body, exitW), scale(dirW, speed)), exitW);
-      // flywheel loses the momentum given to the ball
+      ctx.release(ball, add(this.pointVelOf(body, exitW), scale(dirW, speed)), exitW, launchSpin(dirW, speed, ball.r, L.spin ?? 1));
+      // the ball rolls out between wheel and hood: the wheel pushes 5/6 of m*v (hollow ball, I = 2/3 m r^2), the hood the rest
       const I = (load.inertia ?? 1e-4) + this.motors[L.flywheel].reflectedJ * (load.ratio ?? 1) ** 2;
-      load.omega -= Math.sign(load.omega) * ball.mass * speed * (load.radius ?? 0.048) / I;
+      load.omega -= Math.sign(load.omega) * (5 / 6) * ball.mass * speed * (load.radius ?? 0.048) / I;
       L.cooldown = L.cooldownS ?? 0.25; L.shots++;
     }
   }
