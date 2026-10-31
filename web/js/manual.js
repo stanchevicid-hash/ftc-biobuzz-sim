@@ -18,7 +18,7 @@ export function mechCommands(gp, robot) {
   const out = { motors: {}, servos: {} };
   if (H?.intake) out.motors[H.intake.device] = { mode: 'power', p: gp.right_trigger > 0.3 ? 1 : gp.left_trigger > 0.3 ? -1 : 0, brake: true };
   if (L) {
-    out.motors[L.flywheel] = st.fly ? { mode: 'velocity', tv: 2700 / 60 * robot.motors[L.flywheel].m.ticks, brake: false } : { mode: 'power', p: 0, brake: false };
+    out.motors[L.flywheel] = st.fly ? { mode: 'velocity', tv: 2850 / 60 * robot.motors[L.flywheel].m.ticks, brake: false } : { mode: 'power', p: 0, brake: false };
     if (L.hood) out.servos[L.hood.device] = { pos: st.hood };
     const sv = (cfg.servos || []).some(s => s.name === L.feed.device);
     const on = gp.right_bumper && st.fly;
@@ -32,7 +32,7 @@ export function mechCommands(gp, robot) {
 export function mechStatus(robot) {
   const L = (robot.cfg.launchers || [])[0], st = state.get(robot); if (!L) return null;
   const load = robot.cfg.motors.find(m => m.name === L.flywheel)?.load;
-  return { fly: !!st?.fly, rpm: Math.abs(load?.omega ?? 0) * 60 / (2 * Math.PI) * (load?.ratio ?? 1), target: 2700, hood: st?.hood };
+  return { fly: !!st?.fly, rpm: Math.abs(load?.omega ?? 0) * 60 / (2 * Math.PI) * (load?.ratio ?? 1), target: 2850, hood: st?.hood };
 }
 
 /** where the next ball would fly: launcher exit, hood pitch and the wheel's current surface speed, gravity and air drag */

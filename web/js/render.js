@@ -32,6 +32,27 @@ import { buildFieldVisual, qRotate } from './field.js';
 import { buildDemoVisual } from './robots/demo.js';
 import { sensorWorld } from './sensors.js';
 
+/** alpha mask for a SphereGeometry's equirect UVs: 32 round holes, evenly spread (dodecahedron + icosahedron vertices) */
+function ballHoleMask(THREE) {
+  const t = (1 + Math.sqrt(5)) / 2, it = 1 / t, dirs = [];
+  for (const a of [-1, 1]) for (const b of [-1, 1]) {
+    for (const c of [-1, 1]) dirs.push([a, b, c]);
+    dirs.push([0, a * it, b * t], [a * it, b * t, 0], [a * t, 0, b * it]);   // dodecahedron (20)
+    dirs.push([0, a, b * t], [a, b * t, 0], [a * t, 0, b]);                 // icosahedron (12)
+  }
+  const n = dirs.map(d => { const l = Math.hypot(...d); return d.map(x => x / l); }), cosR = Math.cos(0.16);   // hole ~11 mm on POLLEN
+  const W = 512, H = 256, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d'), img = g.createImageData(W, H);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const ph = (i + 0.5) / W * 2 * Math.PI, th = (j + 0.5) / H * Math.PI;      // the same mapping as THREE.SphereGeometry
+    const d = [-Math.cos(ph) * Math.sin(th), Math.cos(th), Math.sin(ph) * Math.sin(th)];
+    const hole = n.some(c => c[0] * d[0] + c[1] * d[1] + c[2] * d[2] > cosR), k = 4 * (j * W + i);
+    img.data[k] = img.data[k + 1] = img.data[k + 2] = hole ? 0 : 255; img.data[k + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv); tex.anisotropy = 4; return tex;
+}
+
 export class Renderer {
   constructor(canvas, overlay) {
     this.canvas = canvas; this.overlay = overlay;
@@ -114,8 +135,11 @@ export class Renderer {
     this.scene = prev;
     this.ballMeshes = new Map();
     this.ballGeo = { pollen: new THREE.SphereGeometry(sim.balls.find(b => b.type === 'pollen')?.r || 0.0356, 32, 20), nectar: new THREE.SphereGeometry(0.0457, 32, 20) };
-    // molded plastic balls: diffuse color under a thin glossy coat that catches the hall lights
-    const plastic = (color) => new THREE.MeshPhysicalMaterial({ color, roughness: 0.55, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.25, sheen: 0.3, sheenColor: 0xffffff });
+    // molded hollow plastic balls with through-holes: an alpha mask on a double-sided shell, so the inside shows through
+    // the holes and the shadow has them too
+    const holes = this.holeMask ??= ballHoleMask(THREE);
+    const plastic = (color) => new THREE.MeshPhysicalMaterial({ color, roughness: 0.5, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.3,
+      alphaMap: holes, alphaTest: 0.5, side: THREE.DoubleSide });
     this.ballMat = { yellow: plastic(0xf5cf1c), red: plastic(0xd0262a), blue: plastic(0x1f53d0) };
     this.robotV = this.buildRobotVisual(sim.robot, robotModel);
     this.otherVs = (sim.others || []).map(o => ({ robot: o, v: this.buildRobotVisual(o, null) }));

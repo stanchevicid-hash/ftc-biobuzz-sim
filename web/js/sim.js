@@ -1,5 +1,5 @@
 // Simulation core: Rapier world + BIOBUZZ field + robot + game pieces. No rendering here (used headless for batch runs).
-import { buildFieldPhysics, stepHives, initialBalls, GROUP, groups, POLLEN_R, NECTAR_R, POLLEN_MASS, NECTAR_MASS, ZONES, IN, FIELD_HALF, aeroAccel, ROLL_DECEL } from './field.js';
+import { buildFieldPhysics, stepHives, initialBalls, GROUP, groups, POLLEN_R, NECTAR_R, POLLEN_MASS, NECTAR_MASS, ZONES, IN, FIELD_HALF, aeroAccel, ROLL_DECEL, BALL_BOUNCE } from './field.js';
 import { Robot } from './robot.js';
 import { Battery, MOTORS } from './motors.js';
 import { harness, defaultModel } from './wiring.js';
@@ -85,8 +85,8 @@ export class Simulation {
     const R = this.R, r = type === 'pollen' ? POLLEN_R : NECTAR_R, mass = type === 'pollen' ? POLLEN_MASS : NECTAR_MASS;
     // air drag, spin lift and rolling resistance are applied in tick(); the small angular damping is spin decay
     const body = this.world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(...pos).setAngularDamping(0.3).setCcdEnabled(true));
-    const vol = 4 / 3 * Math.PI * r ** 3;
-    const col = this.world.createCollider(R.ColliderDesc.ball(r).setDensity(mass / vol).setFriction(this.opts.params?.ballFriction ?? 0.5).setRestitution(0.45)
+    const I = 2 / 3 * mass * r * r;   // thin hollow shell, not the solid sphere (2/5 m r^2) Rapier would assume
+    const col = this.world.createCollider(R.ColliderDesc.ball(r).setMassProperties(mass, { x: 0, y: 0, z: 0 }, { x: I, y: I, z: I }, { w: 1, x: 0, y: 0, z: 0 }).setFriction(this.opts.params?.ballFriction ?? 0.5).setRestitution(BALL_BOUNCE)
       .setCollisionGroups(groups(GROUP.BALL, 0xffff & ~GROUP.HELD)), body);
     col.userData = { kind: 'ball', color };
     const ball = { body, col, type, color, r, mass, held: false, id: this.balls.length };
