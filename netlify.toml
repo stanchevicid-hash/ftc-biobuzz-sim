@@ -1,4 +1,4 @@
-# Netlify serves the browser part only (field, physics, robot import, test bench, manual driving).
-# Running Java OpModes needs the local bridge: start.bat / start.sh on your computer.
+# Netlify serves web/ as static files. Java OpModes run in the page on CheerpJ (web/java/*.jar, built by start.bat);
+# start.bat / start.sh on a computer runs them on a local JVM instead.
 [build]
   publish = "web"

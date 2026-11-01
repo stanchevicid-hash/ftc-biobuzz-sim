@@ -187,7 +187,12 @@ function phaseText() {
 }
 
 // ------------------------------------------------------------------ Driver Station
-function setServer(ok) { app.serverOk = ok; const s = $('server'); s.textContent = ok ? 'Java bridge connected' : 'Java bridge offline: run start.bat'; s.className = 'bridge ' + (ok ? 'ok' : 'bad'); s.title = s.textContent; }
+function setServer(ok) {
+  app.serverOk = ok; const s = $('server'), web = ok && bridge.transport === 'browser';
+  s.textContent = !ok ? 'Java bridge offline: run start.bat' : web ? 'Java in browser' : 'Java bridge connected';
+  s.className = 'bridge ' + (ok ? 'ok' : 'bad');
+  s.title = web ? 'Built with CheerpJ: Java runs in this page. start.bat runs it faster.' : s.textContent;
+}
 function updateDsButtons() {
   const st = app.op.state;
   $('initBtn').disabled = !app.serverOk || !$('opmode').value || st === 'init' || st === 'running' || app.match.phase === 'auto';
@@ -227,7 +232,7 @@ export async function stopOpMode() {
 function showError(e) {
   if (!e) return;
   const b = $('errBox'); b.classList.remove('hidden');
-  const frames = (e.frames || []).map(f => `  <a data-file="${esc(f.file)}" data-line="${+f.line}">${esc(f.file)}:${+f.line}</a>  ${esc(f.method)}`).join('\n');
+  const frames = (e.frames || []).map(f => `  <a data-file="${esc(f.file)}" data-line="${+f.line}">${esc(f.file)}${f.line > 0 ? ':' + +f.line : ''}</a>  ${esc(f.method)}`).join('\n');
   b.innerHTML = `<b>${esc(e.type || 'Error')}</b>: ${esc(e.message || '')}\n${frames}${e.text ? `\n<details><summary>stack trace</summary>${esc(e.text)}</details>` : ''}`;
   b.querySelectorAll('a').forEach(a => a.onclick = () => gotoLine(a.dataset.file, +a.dataset.line));
 }

@@ -10,5 +10,8 @@ if [ "$1" = "--rebuild" ] || [ ! -f build/server/ftcsim/server/SimServer.class ]
   java -jar server/lib/ecj.jar -1.8 -nowarn -g -encoding UTF-8 -d build/sdk @build/sdk-files.txt || exit 1
   find server/src -name '*.java' > build/server-files.txt
   java -jar server/lib/ecj.jar -1.8 -nowarn -g -encoding UTF-8 -cp "build/sdk${SEP}server/lib/ecj.jar" -d build/server @build/server-files.txt || exit 1
+  # the same classes for the in-browser runtime (CheerpJ) on the hosted site
+  java -cp build/server ftcsim.server.Pack web/java/ftcsim.jar build/sdk build/server examples/=examples || exit 1
+  cp server/lib/ecj.jar web/java/ecj.jar
 fi
 java -cp "build/sdk${SEP}build/server${SEP}server/lib/ecj.jar" ftcsim.server.SimServer . 8740

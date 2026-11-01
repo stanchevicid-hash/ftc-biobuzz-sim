@@ -26,5 +26,8 @@ for /r sdk\src %%f in (*.java) do @echo "%%f">>build\sdk-files.txt
 java -jar server\lib\ecj.jar -1.8 -nowarn -g -encoding UTF-8 -d build\sdk @build\sdk-files.txt || exit /b 1
 for /r server\src %%f in (*.java) do @echo "%%f">>build\server-files.txt
 java -jar server\lib\ecj.jar -1.8 -nowarn -g -encoding UTF-8 -cp "build\sdk;server\lib\ecj.jar" -d build\server @build\server-files.txt || exit /b 1
+rem the same classes for the in-browser runtime (CheerpJ) on the hosted site
+java -cp build\server ftcsim.server.Pack web\java\ftcsim.jar build\sdk build\server examples/=examples || exit /b 1
+copy /y server\lib\ecj.jar web\java\ecj.jar >nul
 echo Build OK.
 exit /b 0

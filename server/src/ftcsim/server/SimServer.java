@@ -14,6 +14,7 @@ import javax.tools.*;
 import java.io.*;
 import java.lang.reflect.Modifier;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
@@ -26,7 +27,7 @@ import java.util.concurrent.Executors;
  * against the simulated FTC SDK, and runs them in this JVM. The browser runs the physics and talks to /api/sync.
  */
 public class SimServer {
-    static Path home, web, sdkClasses, workDir, libsDir, examplesDir;
+    static Path home, web, sdkClasses, libsDir, examplesDir;
     static int wsPort = -1, httpPort;
     static URLClassLoader userLoader;
     static final Map<String, String> opModes = new LinkedHashMap<String, String>(); // display name -> class
@@ -37,7 +38,7 @@ public class SimServer {
         int port = args.length > 1 ? Integer.parseInt(args[1]) : 8740;
         httpPort = port;
         web = home.resolve("web"); sdkClasses = home.resolve("build/sdk"); libsDir = home.resolve("libs");
-        examplesDir = home.resolve("examples"); workDir = home.resolve("build/user");
+        examplesDir = home.resolve("examples");
         HttpServer s = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         s.createContext("/api/", new com.sun.net.httpserver.HttpHandler() { public void handle(HttpExchange x) throws IOException { api(x); } });
         s.createContext("/", new com.sun.net.httpserver.HttpHandler() { public void handle(HttpExchange x) throws IOException { file(x); } });
@@ -181,39 +182,75 @@ public class SimServer {
     }
 
     // ------------------------------------------------------------------ compile
+    /** source text in memory */
+    static final class Src extends SimpleJavaFileObject {
+        final String code;
+        Src(String name, String code) { super(URI.create("file:///ftcsim-src/" + name), Kind.SOURCE); this.code = code; }
+        @Override public CharSequence getCharContent(boolean ignore) { return code; }
+    }
+    /** compiled classes stay in memory: no build/user folder, and in the browser no IndexedDB writes (those hung CheerpJ) */
+    static final class MemOut extends ForwardingJavaFileManager<StandardJavaFileManager> {
+        final Map<String, byte[]> classes = new TreeMap<String, byte[]>();
+        MemOut(StandardJavaFileManager fm) { super(fm); }
+        @Override public JavaFileObject getJavaFileForOutput(Location l, final String cn, JavaFileObject.Kind k, FileObject sibling) {
+            return new SimpleJavaFileObject(URI.create("mem:///" + cn.replace('.', '/') + k.extension), k) {
+                @Override public OutputStream openOutputStream() {
+                    return new ByteArrayOutputStream() { @Override public void close() { classes.put(cn.replace('/', '.'), toByteArray()); } };
+                }
+            };
+        }
+    }
+    static final class MemLoader extends URLClassLoader {
+        final Map<String, byte[]> classes;
+        MemLoader(Map<String, byte[]> classes, URL[] jars, ClassLoader parent) { super(jars, parent); this.classes = classes; }
+        @Override protected Class<?> findClass(String n) throws ClassNotFoundException {
+            byte[] b = classes.get(n);
+            return b != null ? defineClass(n, b, 0, b.length) : super.findClass(n);
+        }
+    }
+
+    /** ECJ gives no getSource() for in-memory sources, only its own originatingFileName field (ECJ is pinned in server/lib) */
+    static String sourceName(Diagnostic<? extends JavaFileObject> d) {
+        String n = d.getSource() != null ? d.getSource().getName() : null;
+        if (n == null) for (java.lang.reflect.Field f : d.getClass().getDeclaredFields()) {
+            if (!f.getName().endsWith("originatingFileName")) continue;
+            try { f.setAccessible(true); Object v = f.get(d); n = v instanceof char[] ? new String((char[]) v) : (String) v; } catch (Exception ignored) {}
+        }
+        return n == null || n.isEmpty() ? "" : n.substring(Math.max(n.lastIndexOf('/'), n.lastIndexOf('\\')) + 1);
+    }
+
     static synchronized Map<String, Object> compile(List<Object> files) throws Exception {
         Runner.stop();
-        Path src = workDir.resolve("src"), out = workDir.resolve("classes");
-        deleteTree(workDir); Files.createDirectories(src); Files.createDirectories(out);
-        List<File> sources = new ArrayList<File>();
+        List<JavaFileObject> sources = new ArrayList<JavaFileObject>();
         Set<String> names = new HashSet<String>();
         for (Object o : files) {
             Map<String, Object> f = Json.obj(o);
             String name = Paths.get(Json.str(f.get("name"), "OpMode.java")).getFileName().toString();
             if (!name.endsWith(".java")) continue;
-            Path dst = src.resolve(name);
-            Files.write(dst, Json.str(f.get("code"), "").getBytes(StandardCharsets.UTF_8));
-            sources.add(dst.toFile()); names.add(name);
+            sources.add(new Src(name, Json.str(f.get("code"), ""))); names.add(name);
         }
+        JavaCompiler jc = new org.eclipse.jdt.internal.compiler.tool.EclipseCompiler();
+        DiagnosticCollector<JavaFileObject> dc = new DiagnosticCollector<JavaFileObject>();
+        StandardJavaFileManager sfm = jc.getStandardFileManager(dc, Locale.ENGLISH, StandardCharsets.UTF_8);
         // team libraries: any .java under libs/ is compiled with the user code, any .jar is put on the classpath
         List<URL> extra = new ArrayList<URL>();
         StringBuilder cp = new StringBuilder(sdkClasses.toString());
         if (Files.isDirectory(libsDir)) {
+            List<File> libSrc = new ArrayList<File>();
             try (java.util.stream.Stream<Path> w = Files.walk(libsDir)) {
                 for (Iterator<Path> it = w.iterator(); it.hasNext(); ) {
                     Path p = it.next();
-                    if (p.toString().endsWith(".java")) sources.add(p.toFile());
+                    if (p.toString().endsWith(".java")) libSrc.add(p.toFile());
                     if (p.toString().endsWith(".jar")) { cp.append(File.pathSeparator).append(p); extra.add(p.toUri().toURL()); }
                 }
             }
+            for (JavaFileObject j : sfm.getJavaFileObjectsFromFiles(libSrc)) sources.add(j);
         }
         Runner.userFiles = names;
 
-        JavaCompiler jc = new org.eclipse.jdt.internal.compiler.tool.EclipseCompiler();
-        DiagnosticCollector<JavaFileObject> dc = new DiagnosticCollector<JavaFileObject>();
-        StandardJavaFileManager fm = jc.getStandardFileManager(dc, Locale.ENGLISH, StandardCharsets.UTF_8);
-        List<String> opts = Arrays.asList("-d", out.toString(), "-cp", cp.toString(), "-1.8", "-g", "-encoding", "UTF-8", "-nowarn", "-proc:none");
-        boolean ok = sources.isEmpty() || jc.getTask(null, fm, dc, opts, null, fm.getJavaFileObjectsFromFiles(sources)).call();
+        MemOut fm = new MemOut(sfm);
+        List<String> opts = Arrays.asList("-cp", cp.toString(), "-1.8", "-g", "-encoding", "UTF-8", "-nowarn", "-proc:none");
+        boolean ok = sources.isEmpty() || jc.getTask(null, fm, dc, opts, null, sources).call();
         fm.close();
 
         List<Object> diags = new ArrayList<Object>();
@@ -221,41 +258,39 @@ public class SimServer {
             if (d.getKind() == Diagnostic.Kind.NOTE) continue;
             Map<String, Object> m = new LinkedHashMap<String, Object>();
             m.put("kind", d.getKind().toString());
-            m.put("file", d.getSource() == null ? "" : Paths.get(d.getSource().getName()).getFileName().toString());
+            m.put("file", sourceName(d));
             m.put("line", d.getLineNumber());
             m.put("col", d.getColumnNumber());
             m.put("msg", d.getMessage(Locale.ENGLISH));
             diags.add(m);
         }
-        if (dc.getDiagnostics().isEmpty() && !ok) diags.add(Collections.singletonMap("msg", "Compilation failed"));
+        if (dc.getDiagnostics().isEmpty() && !ok) {   // the compiler itself failed (its stack trace is on stderr)
+            Map<String, Object> m = new LinkedHashMap<String, Object>();
+            m.put("kind", "ERROR"); m.put("file", ""); m.put("line", 0); m.put("msg", "Compilation failed");
+            diags.add(m);
+        }
 
         List<Object> found = new ArrayList<Object>();
         opModes.clear();
         boolean hasErrors = false;
         for (Object d : diags) if ("ERROR".equals(Json.obj(d).get("kind"))) hasErrors = true;
         if (!hasErrors) {
-            extra.add(0, out.toUri().toURL());
             if (userLoader != null) try { userLoader.close(); } catch (IOException ignored) {}
-            userLoader = new URLClassLoader(extra.toArray(new URL[0]), SimServer.class.getClassLoader());
-            try (java.util.stream.Stream<Path> w = Files.walk(out)) {
-                for (Iterator<Path> it = w.iterator(); it.hasNext(); ) {
-                    Path p = it.next();
-                    if (!p.toString().endsWith(".class")) continue;
-                    String cn = out.relativize(p).toString().replace(File.separatorChar, '.').replaceAll("\\.class$", "");
-                    Class<?> c;
-                    try { c = Class.forName(cn, false, userLoader); } catch (Throwable e) { continue; }
-                    if (!OpMode.class.isAssignableFrom(c) || Modifier.isAbstract(c.getModifiers()) || c.isAnnotationPresent(Disabled.class)) continue;
-                    TeleOp t = c.getAnnotation(TeleOp.class); Autonomous a = c.getAnnotation(Autonomous.class);
-                    if (t == null && a == null) continue;
-                    Map<String, Object> m = new LinkedHashMap<String, Object>();
-                    String nm = t != null ? t.name() : a.name();
-                    m.put("cls", cn);
-                    m.put("name", nm.isEmpty() ? c.getSimpleName() : nm);
-                    m.put("group", t != null ? t.group() : a.group());
-                    m.put("kind", t != null ? "TeleOp" : "Autonomous");
-                    if (a != null) m.put("preselectTeleOp", a.preselectTeleOp());
-                    found.add(m);
-                }
+            userLoader = new MemLoader(fm.classes, extra.toArray(new URL[0]), SimServer.class.getClassLoader());
+            for (String cn : fm.classes.keySet()) {
+                Class<?> c;
+                try { c = Class.forName(cn, false, userLoader); } catch (Throwable e) { continue; }
+                if (!OpMode.class.isAssignableFrom(c) || Modifier.isAbstract(c.getModifiers()) || c.isAnnotationPresent(Disabled.class)) continue;
+                TeleOp t = c.getAnnotation(TeleOp.class); Autonomous a = c.getAnnotation(Autonomous.class);
+                if (t == null && a == null) continue;
+                Map<String, Object> m = new LinkedHashMap<String, Object>();
+                String nm = t != null ? t.name() : a.name();
+                m.put("cls", cn);
+                m.put("name", nm.isEmpty() ? c.getSimpleName() : nm);
+                m.put("group", t != null ? t.group() : a.group());
+                m.put("kind", t != null ? "TeleOp" : "Autonomous");
+                if (a != null) m.put("preselectTeleOp", a.preselectTeleOp());
+                found.add(m);
             }
         }
         Map<String, Object> r = new LinkedHashMap<String, Object>();
@@ -263,14 +298,5 @@ public class SimServer {
         r.put("diagnostics", diags);
         r.put("opmodes", found);
         return r;
-    }
-
-    static void deleteTree(Path p) throws IOException {
-        if (!Files.exists(p)) return;
-        try (java.util.stream.Stream<Path> w = Files.walk(p)) {
-            List<Path> all = new ArrayList<Path>(); for (Iterator<Path> it = w.iterator(); it.hasNext(); ) all.add(it.next());
-            Collections.reverse(all);
-            for (Path q : all) Files.deleteIfExists(q);
-        }
     }
 }

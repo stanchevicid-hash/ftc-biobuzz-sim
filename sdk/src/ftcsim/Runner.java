@@ -101,10 +101,15 @@ public final class Runner {
         for (Throwable c = e; c != null; c = c.getCause() == c ? null : c.getCause()) {
             if (c != e) text.append("\nCaused by: ").append(c);
             for (StackTraceElement s : c.getStackTrace()) {
-                boolean user = s.getFileName() != null && userFiles.contains(s.getFileName());
+                String file = s.getFileName();
+                if (file == null) {      // the in-browser JVM (CheerpJ) drops file and line: guess the file from the class
+                    String cn = s.getClassName(); cn = cn.substring(cn.lastIndexOf('.') + 1);
+                    file = (cn.indexOf('$') < 0 ? cn : cn.substring(0, cn.indexOf('$'))) + ".java";
+                }
+                boolean user = userFiles.contains(file);
                 if (user) {
                     Map<String, Object> f = new LinkedHashMap<String, Object>();
-                    f.put("file", s.getFileName()); f.put("line", s.getLineNumber()); f.put("method", s.getClassName() + "." + s.getMethodName());
+                    f.put("file", file); f.put("line", s.getLineNumber()); f.put("method", s.getClassName() + "." + s.getMethodName());
                     frames.add(f);
                 }
                 if (user || s.getClassName().startsWith("com.qualcomm") || s.getClassName().startsWith("org.firstinspires"))

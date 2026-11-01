@@ -5,10 +5,14 @@
 
 ## Запуск
 
+**Без установки:** откройте сайт симулятора — Java-код компилируется и работает прямо в браузере
+(CheerpJ, первый запуск ~10 с; подробности и замеры — [docs/browser-java.md](docs/browser-java.md)).
+Локальный запуск ниже работает без интернета и чуть быстрее:
+
 ```
 start.bat            (Windows; первый запуск сам соберёт SDK и мост)
 ./start.sh           (macOS / Linux)
-start.bat --rebuild  (пересобрать после правок в sdk/ или server/)
+start.bat --rebuild  (пересобрать после правок в sdk/ или server/; обновляет и web/java/*.jar для сайта — их надо коммитить)
 ```
 
 Откроется `http://localhost:8740`. Нужна **Java 8+** (подходит JRE; в Android Studio есть своя — `…\Android Studio\jbr\bin`).
