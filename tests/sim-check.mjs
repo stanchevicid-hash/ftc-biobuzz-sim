@@ -2,7 +2,7 @@
 import RAPIER from '../web/vendor/rapier/rapier.es.js';
 import { Simulation } from '../web/js/sim.js';
 import { DEMO_ROBOT } from '../web/js/robots/demo.js';
-import { START_POSES, IN } from '../web/js/field.js';
+import { START_POSES, IN, FRAME } from '../web/js/field.js';
 
 await RAPIER.init();
 let failed = 0;
@@ -93,6 +93,28 @@ check('opponent pushes a braked robot', pushed > 3, `pushed ${pushed.toFixed(1)}
     s.setCommands(mechCommands({}, s.robot)); s.tick();
   }
   check("predicted arc matches the flight", ball && worst < 0.02, `largest gap ${(worst * 100).toFixed(1)} cm over 0.4 s`);
+  s.destroy();
+}
+
+// 8. the HIVE frame legs are solid: the robot stops at a leg, a ball bounces off it
+{
+  const legX = (z) => FRAME.halfDepth * (1 - z / 43.95 / IN);   // leg's x at height z (+x leg)
+  let s = mk({ x: 1.3, y: FRAME.halfWidth, heading: 180 });       // drive along the A-frame into its +x leg
+  drive(s, 0.6, 0, 4);
+  const x = s.robot.body.translation().x;
+  check('robot stops at a HIVE frame leg', x > legX(0), `robot center ${(x / IN).toFixed(1)} in, leg base ${(legX(0) / IN).toFixed(1)} in`);
+  s.destroy();
+  s = mk({ x: 12 * IN, y: 1.4, heading: -90 });                   // drive across the A-frame where the leg is at bumper height
+  drive(s, 0.6, 0, 4);
+  const y = s.robot.body.translation().y;
+  check('robot cannot cross a leg', y > FRAME.halfWidth, `robot center y ${(y / IN).toFixed(1)} in, frame at ${(FRAME.halfWidth / IN).toFixed(1)} in`);
+  s.destroy();
+  s = mk({ x: -1.3, y: -1.3, heading: 0 });
+  const b = s.balls.find(bb => !bb.held);
+  b.body.setTranslation({ x: 30 * IN, y: FRAME.halfWidth, z: 6 * IN }, true); b.body.setLinvel({ x: -3, y: 0, z: 0 }, true);
+  for (let k = 0; k < 50; k++) s.tick();
+  const bx = b.body.translation().x;
+  check('ball bounces off a leg', bx > legX(6 * IN), `ball x ${(bx / IN).toFixed(1)} in, leg ${(legX(6 * IN) / IN).toFixed(1)} in`);
   s.destroy();
 }
 

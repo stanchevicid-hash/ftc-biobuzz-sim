@@ -77,6 +77,11 @@ async function parseGltf(buf) {
   return { parts, unit: 1 };
 }
 function parseVec(s, d = [0, 0, 0]) { return s ? s.trim().split(/\s+/).map(Number) : d; }
+async function parseStl(files) {   // one part per .stl file (select several to keep wheels separate)
+  const stl = new STLLoader(), parts = [];
+  for (const f of files) parts.push({ name: f.name.replace(/\.stl$/i, ''), mesh: new THREE.Mesh(stl.parse(await f.arrayBuffer()), new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: 0.3, roughness: 0.6 })) });
+  return { parts, unit: 1 };
+}
 async function parseUrdf(text, files) {
   const x = new DOMParser().parseFromString(text, 'application/xml');
   const links = {}, joints = [];
@@ -374,15 +379,17 @@ export function initRobotTab(app, el) {
   const progress = (msg, v) => { $('rbProg').classList.remove('hidden'); $('rbProg').value = v; $('rbStatus').textContent = msg; };
 
   async function handleFiles(files) {
+    let main = null;
     try {
       const json = files.find(f => /\.json$/i.test(f.name));
       if (json) { await importJson(await json.text()); progress('Configuration loaded', 1); return; }
-      const main = files.find(f => /\.(step|stp|glb|gltf|urdf)$/i.test(f.name));
-      if (!main) throw new Error('Choose a .step, .glb, .gltf, .urdf (with .stl files) or .json file');
+      main = files.find(f => /\.(step|stp|glb|gltf|urdf)$/i.test(f.name)) || files.find(f => /\.stl$/i.test(f.name));
+      if (!main) throw new Error('Choose a .step, .glb, .gltf, .stl, .urdf (with .stl files) or .json file');
       S.fileName = main.name; progress(`Reading ${main.name} (${(main.size / 1e6).toFixed(1)} MB)…`, 0.05);
       let r;
       if (/\.(step|stp)$/i.test(main.name)) { r = await parseStep(await main.arrayBuffer(), progress); S.opts = { unit: 1, up: 'z', fwd: '+y' }; }
       else if (/\.(glb|gltf)$/i.test(main.name)) { r = await parseGltf(await main.arrayBuffer()); S.opts = { unit: 1, up: 'y', fwd: '-y' }; }   // glTF: the front of an asset faces +Z
+      else if (/\.stl$/i.test(main.name)) { r = await parseStl(files.filter(f => /\.stl$/i.test(f.name))); S.opts = { unit: 1, up: 'z', fwd: '+y' }; }
       else { r = await parseUrdf(await main.text(), files); S.opts = { unit: 1, up: 'z', fwd: '+x' }; }
       S.parts = r.parts; S.urdf = r.urdf || null;
       if (!S.parts.length) throw new Error('No parts (meshes) found in this file');
@@ -398,7 +405,11 @@ export function initRobotTab(app, el) {
       }
       $('rbUnit').value = S.opts.unit; $('rbUp').value = S.opts.up; $('rbFwd').value = S.opts.fwd;
       progress(`Found ${S.parts.length} parts.${unitNote}${turned} Check the setup below, then press Use this robot.`, 1);
-    } catch (e) { progress('Could not load: ' + e.message, 0); console.error(e); }
+    } catch (e) {
+      const what = main ? `${main.name} (${main.name.split('.').pop().toUpperCase()}, ${(main.size / 1e6).toFixed(1)} MB): ` : '';
+      const hint = main && /\.(step|stp)$/i.test(main.name) ? ' Try a smaller sub-assembly, or export GLB/STL.' : '';
+      progress(`Could not load ${what}${e?.message || e}.${hint}`, 0); console.error(e);
+    }
   }
   function rebuild(name) { normalize(); autoConfig(name); renderMarkup(); $('rbMarkup').classList.remove('hidden'); }
   const turn = (map) => { S.opts.fwd = map[S.opts.fwd]; $('rbFwd').value = S.opts.fwd; rebuild(S.cfg?.name); };

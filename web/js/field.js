@@ -139,16 +139,19 @@ export function buildFieldPhysics(R, world) {
   box([0, W + t, WALL_H / 2], [W + 2 * t, t, WALL_H / 2], { data: { kind: 'wall' } });
   box([0, -W - t, WALL_H / 2], [W + 2 * t, t, WALL_H / 2], { data: { kind: 'wall' } });
 
-  // HIVE frame: 4 legs (A-frames 49.46 in wide, 38.95 in deep at the base) and the crossbar
-  const legR = 0.6 * IN;
-  for (const sy of [1, -1]) for (const sx of [1, -1]) {
-    const a = [sx * FRAME.halfDepth, sy * FRAME.halfWidth, 0], b = [0, sy * FRAME.halfWidth, HIVE.pivotZ];
-    const c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
-    const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], len = Math.hypot(...d);
-    const ang = Math.acos(d[2] / len), ax = [-d[1], d[0], 0], al = Math.hypot(ax[0], ax[1]) || 1;
-    const rot = qAxis(ax[0] / al, ax[1] / al, 0, ang);
-    const col = world.createCollider(R.ColliderDesc.capsule(len / 2, legR).setTranslation(...c).setRotation(rot)
-      .setCollisionGroups(groups(GROUP.FIELD, 0xffff)), fixed);
+  // HIVE frame: 4 legs of 1 in square tube (A-frames 49.46 in wide, 38.95 in deep at the base), boxes laid exactly over the meshes
+  for (const sy of [1, -1]) {
+    for (const sx of [1, -1]) {
+      const a = [sx * FRAME.halfDepth, sy * FRAME.halfWidth, 0], b = [0, sy * FRAME.halfWidth, HIVE.pivotZ];
+      const d = [b[0] - a[0], 0, b[2] - a[2]], len = Math.hypot(...d);
+      // the box's long axis is Y, as in the mesh: rotate +Y onto the leg direction (axis Y x d, 90 deg)
+      box([(a[0] + b[0]) / 2, sy * FRAME.halfWidth, b[2] / 2], [0.5 * IN, len / 2, 0.5 * IN], { rot: qAxis(d[2] / len, 0, -d[0] / len, Math.PI / 2), rest: 0.3, data: { kind: 'frame' } });
+    }
+    // yellow BIOBUZZ panel just under the apex (same trapezoid as the visual)
+    const z0 = HIVE.pivotZ - 17 * IN, z1 = HIVE.pivotZ - 5 * IN, w = (z) => FRAME.halfDepth * (1 - z / HIVE.pivotZ) - 0.6 * IN, y = sy * (FRAME.halfWidth + 0.55 * IN), t = 0.06 * IN;
+    const pts = [];
+    for (const [x, z] of [[-w(z0), z0], [w(z0), z0], [w(z1), z1], [-w(z1), z1]]) pts.push(x, y - t, z, x, y + t, z);
+    const col = world.createCollider(R.ColliderDesc.convexHull(new Float32Array(pts)).setFriction(0.4).setRestitution(0.2).setCollisionGroups(groups(GROUP.FIELD, 0xffff)), fixed);
     col.userData = { kind: 'frame' };
   }
   box([0, 0, HIVE.pivotZ + 1.5 * IN], [0.75 * IN, FRAME.halfWidth + 1 * IN, 0.75 * IN], { data: { kind: 'frame' } });
