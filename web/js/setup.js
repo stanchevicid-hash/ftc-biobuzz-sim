@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { MOTORS, SERVOS, motorFromSku, servoFromSku } from './motors.js';
 import { DEMO_ROBOT } from './robots/demo.js';
 import { robotExtents } from './sim.js';
@@ -41,27 +42,79 @@ export function detectRole(name) {
 }
 
 // ------------------------------------------------------------------ loaders -> { parts:[{name, mesh(Object3D in model units)}], urdf? }
-async function parseStep(buf, progress) {
-  progress('Loading the STEP reader (8 MB). Big assemblies take a few minutes.', 0.2);
+async function parseStep(file, progress) {
+  progress('Loading the STEP reader (8 MB)…', 0.03);
+  const lanes = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1)), pool = occtPool(lanes);
   const res = await new Promise((resolve, reject) => {
     const w = new Worker('js/step-worker.js');
-    let t = 0.2; const tick = setInterval(() => progress(`Reading STEP… ${Math.round(t * 100)}%`, t = Math.min(0.9, t + 0.01)), 1000);
-    w.onmessage = (e) => { if (e.data.progress) return; clearInterval(tick); w.terminate(); e.data.error ? reject(new Error(e.data.error)) : resolve(e.data); };
-    w.onerror = (e) => { clearInterval(tick); w.terminate(); reject(new Error(e.message || 'worker error')); };
-    w.postMessage(buf, [buf]);
+    w.onmessage = (e) => {
+      if (e.data.job !== undefined) return pool.run(e.data).then(r => w.postMessage({ jobDone: e.data.job, ...r }, (r.meshes || []).flatMap(m => m.index ? [m.position.buffer, m.index.buffer] : [m.position.buffer])));
+      if (e.data.progress) return progress(e.data.progress, e.data.v ?? 0.2);
+      w.terminate(); pool.close(); e.data.error ? reject(new Error(e.data.error)) : resolve(e.data);
+    };
+    w.onerror = (e) => { w.terminate(); pool.close(); reject(new Error(e.message || 'the STEP reader stopped (out of memory?)')); };
+    w.postMessage({ file, lanes });
   });
   progress('Building meshes…', 0.95);
   const parts = res.meshes.map((m, i) => {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(m.position, 3));
-    if (m.normal) g.setAttribute('normal', new THREE.BufferAttribute(m.normal, 3)); else g.computeVertexNormals();
-    if (m.index) g.setIndex(new THREE.BufferAttribute(m.index, 1));
-    const c = m.color ? new THREE.Color(...m.color) : new THREE.Color(0x9aa0a6);
     const segs = m.path ? m.path.split(' / ') : [];
-    const name = m.name || segs[segs.length - 1] || `part ${i + 1}`;
-    return { name, path: m.path || name, mesh: new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: c, metalness: 0.3, roughness: 0.6 })) };
+    return { name: m.name || segs[segs.length - 1] || `part ${i + 1}`, path: m.path || m.name || '', mesh: meshOf(m, m.color ? new THREE.Color(...m.color) : null) };
   });
-  return { parts, unit: 1 };   // already in meters
+  return { parts: mergeSmall(parts), unit: 1, note: res.note || '' };   // already in meters
+}
+/** OpenCascade workers for the batches of a huge STEP file; a worker that dies is replaced */
+function occtPool(n) {
+  let wasm = null; const idle = [], waiting = [], all = new Set();
+  const spawn = () => { const w = new Worker('js/occt-worker.js'); all.add(w); return w; };
+  for (let i = 0; i < n; i++) idle.push(spawn());
+  const give = (w) => { const next = waiting.shift(); if (next) next(w); else idle.push(w); };
+  const take = () => idle.length ? Promise.resolve(idle.pop()) : new Promise(r => waiting.push(r));
+  return {
+    async run({ job, bytes, params }) {
+      wasm ||= fetch('vendor/occt/occt-import-js.wasm').then(r => r.arrayBuffer());
+      const bin = await wasm, w = await take();
+      const r = await new Promise((resolve) => {
+        w.onmessage = (e) => resolve(e.data);
+        w.onerror = (e) => { e.preventDefault(); resolve({ error: e.message || 'worker stopped', dead: true }); };
+        w.postMessage({ id: job, bytes, params, wasm: bin }, [bytes.buffer]);
+      });
+      if (r.dead) { w.terminate(); all.delete(w); give(spawn()); } else give(w);
+      return r.error ? { error: r.error } : { meshes: r.meshes };
+    },
+    close() { all.forEach(w => w.terminate()); },
+  };
+}
+/** raw arrays from a worker -> THREE.Mesh */
+function meshOf(m, color) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(m.position, 3));
+  if (m.index) g.setIndex(new THREE.BufferAttribute(m.index, 1));
+  if (m.normal) g.setAttribute('normal', new THREE.BufferAttribute(m.normal, 3)); else g.computeVertexNormals();
+  return new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: color || 0x9aa0a6, metalness: 0.3, roughness: 0.6 }));
+}
+/** same attributes everywhere (position, normal, an index), so geometries can be merged */
+function plain(g) {
+  if (!g.index) g.setIndex(new THREE.BufferAttribute(Uint32Array.from({ length: g.attributes.position.count }, (_, i) => i), 1));
+  if (!g.attributes.normal) g.computeVertexNormals();
+  for (const n of Object.keys(g.attributes)) if (n !== 'position' && n !== 'normal') g.deleteAttribute(n);
+  return g;
+}
+/** thousands of parts (screws, nuts, every instance) make the markup table and the scene slow: past MAX_PARTS,
+ *  plain chassis parts are merged by color; wheels, motors, servos and sensors stay separate */
+const MAX_PARTS = 600;
+function mergeSmall(parts) {
+  if (parts.length <= MAX_PARTS) return parts;
+  const keep = [], groups = new Map();
+  for (const p of parts) {
+    if (detectRole((p.path || '') + ' / ' + p.name).role !== 'chassis') { keep.push(p); continue; }
+    const k = p.mesh.material.color.getHex();
+    (groups.get(k) || groups.set(k, []).get(k)).push(p);
+  }
+  for (const [k, ps] of groups) {
+    const geo = mergeGeometries(ps.map(p => plain(p.mesh.geometry)));
+    keep.push({ name: `${ps.length} chassis parts`, path: 'merged', mesh: new THREE.Mesh(geo, ps[0].mesh.material) });
+  }
+  return keep;
 }
 async function parseGltf(buf) {
   const gltf = await new Promise((res, rej) => new GLTFLoader().parse(buf, '', res, rej));
@@ -77,10 +130,14 @@ async function parseGltf(buf) {
   return { parts, unit: 1 };
 }
 function parseVec(s, d = [0, 0, 0]) { return s ? s.trim().split(/\s+/).map(Number) : d; }
-async function parseStl(files) {   // one part per .stl file (select several to keep wheels separate)
-  const stl = new STLLoader(), parts = [];
-  for (const f of files) parts.push({ name: f.name.replace(/\.stl$/i, ''), mesh: new THREE.Mesh(stl.parse(await f.arrayBuffer()), new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: 0.3, roughness: 0.6 })) });
-  return { parts, unit: 1 };
+async function parseMeshFiles(files, progress) {   // STL / OBJ of any size, one part per file (OBJ: per object)
+  const res = await new Promise((resolve, reject) => {
+    const w = new Worker('js/mesh-worker.js');
+    w.onmessage = (e) => { if (e.data.progress) return progress(e.data.progress, e.data.v ?? 0.2); w.terminate(); e.data.error ? reject(new Error(e.data.error)) : resolve(e.data); };
+    w.onerror = (e) => { w.terminate(); reject(new Error(e.message || 'the mesh reader stopped (out of memory?)')); };
+    w.postMessage(files);
+  });
+  return { parts: mergeSmall(res.meshes.map(m => ({ name: m.name, mesh: meshOf(m) }))), unit: 1 };
 }
 async function parseUrdf(text, files) {
   const x = new DOMParser().parseFromString(text, 'application/xml');
@@ -226,16 +283,25 @@ function makeModelVisual() {
   const parts = S.parts.map(p => ({ name: p.name, role: p.role, link: p.link, wheel: p.wheel, geo: p.geo, mat: p.mesh.material }));
   return {
     build(THREE_, robot) {
-      const root = new THREE.Group(), links = {}, spins = [];
+      const root = new THREE.Group(), links = {}, spins = [], same = new Map();
       for (const id of Object.keys(robot.links)) links[id] = new THREE.Group();
       for (const p of parts) {
         if (p.role === 'ignore') continue;
+        if (p.role !== 'wheel') {   // static parts: one draw call per link and color
+          const k = (p.link && links[p.link] ? p.link : '') + '|' + p.mat.color.getHex();
+          (same.get(k) || same.set(k, { link: p.link, mat: p.mat, geos: [] }).get(k)).geos.push(p.geo);
+          continue;
+        }
         const mesh = new THREE.Mesh(p.geo, p.mat); mesh.castShadow = true;
         if (p.role === 'wheel' && p.wheel) {
           const w = robot.wheels.find(x => x.motor === p.wheel) || robot.wheels.find(x => x.cfgName === p.wheel);
           if (w) { const g = new THREE.Group(); g.position.set(...w.pos); mesh.position.set(-w.pos[0], -w.pos[1], -w.pos[2]); g.add(mesh); root.add(g); spins.push({ g, w }); continue; }
         }
         (p.link && links[p.link] ? links[p.link] : root).add(mesh);
+      }
+      for (const { link, mat, geos } of same.values()) {
+        const mesh = new THREE.Mesh(geos.length > 1 ? mergeGeometries(geos.map(g => plain(g.clone()))) : geos[0], mat); mesh.castShadow = true;
+        (link && links[link] ? links[link] : root).add(mesh);
       }
       return { root, links, update(r) { for (const { g, w } of spins) g.rotation.x = -w.angle; } };
     },
@@ -246,13 +312,13 @@ function makeModelVisual() {
 async function packModel() {
   const scene = new THREE.Scene();
   S.parts.forEach((p, i) => { const m = new THREE.Mesh(p.geo, p.mesh.material); m.name = i + '|' + p.name; scene.add(m); });
-  const glb = new Uint8Array(await new GLTFExporter().parseAsync(scene, { binary: true }));
-  let bin = ''; for (let i = 0; i < glb.length; i += 0x8000) bin += String.fromCharCode.apply(null, glb.subarray(i, i + 0x8000));
-  return { glb: btoa(bin), parts: S.parts.map(p => ({ name: p.name, role: p.role, link: p.link, wheel: p.wheel })) };
+  const bin = new Uint8Array(await new GLTFExporter().parseAsync(scene, { binary: true }));
+  return { bin, parts: S.parts.map(p => ({ name: p.name, role: p.role, link: p.link, wheel: p.wheel })) };
 }
+function toBase64(bin) { let s = ''; for (let i = 0; i < bin.length; i += 0x8000) s += String.fromCharCode.apply(null, bin.subarray(i, i + 0x8000)); return btoa(s); }
 /** apply a config + model: the (large) model goes to IndexedDB, the config to localStorage */
 async function applyWithModel(cfg, packed) {
-  if (packed) { await idb.set('model', packed.glb); cfg = { ...cfg, visual: { type: 'model', parts: packed.parts } }; }
+  if (packed) { await idb.set('model', packed.bin); cfg = { ...cfg, visual: { type: 'model', parts: packed.parts } }; }   // bytes, not base64: big models
   setRobot(cfg, makeModelVisual());
 }
 
@@ -269,8 +335,8 @@ export function initRobotTab(app, el) {
     <div class="card insp-card"><div class="insp-head"><b>Inspection</b><span id="rbInspTally" class="insp-tally"></span><button id="rbInspRun">Run again</button></div>
       <ul id="rbInsp" class="insp"></ul><div id="rbInspState" class="small"></div></div>
     <div class="card"><b>Your robot</b>
-      <div class="drop" id="rbDrop" title="STEP from Onshape, SolidWorks or Fusion; GLB/glTF (Onshape: right-click the assembly, Export, GLTF); URDF with its STL files; or a saved .json">
-        <label class="filebtn" >Load CAD<input type="file" id="rbFile" multiple hidden accept=".step,.stp,.glb,.gltf,.urdf,.stl,.json"></label></div>
+      <div class="drop" id="rbDrop" title="STEP from Onshape, SolidWorks or Fusion, any size (big files are read in pieces, a 1.5 GB assembly takes several minutes); GLB/glTF (Onshape: right-click the assembly, Export, GLTF); STL or OBJ; URDF with its STL files; or a saved .json. Huge models are simplified to 3 million triangles.">
+        <label class="filebtn" >Load CAD<input type="file" id="rbFile" multiple hidden accept=".step,.stp,.glb,.gltf,.urdf,.stl,.obj,.json"></label></div>
       <progress id="rbProg" class="hidden" max="1" value="0"></progress><div id="rbStatus" class="small"></div>
     </div>
     <div id="rbMarkup" class="hidden">
@@ -350,7 +416,7 @@ export function initRobotTab(app, el) {
   $('rbDemo').onclick = () => { setRobot(DEMO_ROBOT); summary(); };
   $('rbExport').onclick = async () => {
     const cfg = JSON.parse(JSON.stringify(app.robotCfg));
-    if (app.robotModel && S.parts.length) { const p = await packModel(); cfg.visual = { type: 'model', glb: p.glb, parts: p.parts }; }
+    if (app.robotModel && S.parts.length) { const p = await packModel(); cfg.visual = { type: 'model', glb: toBase64(p.bin), parts: p.parts }; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(cfg, null, 1)], { type: 'application/json' }));
     a.download = (cfg.name || 'robot').replace(/[^\w-]+/g, '_') + '.ftcsim.json'; a.click();
   };
@@ -358,14 +424,15 @@ export function initRobotTab(app, el) {
   $('rbJsonBtn').onclick = () => { $('rbJson').classList.toggle('hidden'); $('rbJsonRow').classList.toggle('hidden'); $('rbJson').value = JSON.stringify({ ...app.robotCfg, visual: app.robotCfg.visual?.glb ? { ...app.robotCfg.visual, glb: '(embedded)' } : app.robotCfg.visual }, null, 1); };
   $('rbJsonApply').onclick = () => { try { const c = JSON.parse($('rbJson').value); if (c.visual?.glb === '(embedded)') c.visual = app.robotCfg.visual; setRobot(c, app.robotModel); summary(); } catch (e) { alert('JSON: ' + e.message); } };
 
-  async function importJson(text) {
+  async function importJson(text, bin) {   // bin: the model's GLB bytes when they are not inside the JSON
     const cfg = JSON.parse(text);
-    if (cfg.visual?.glb) {
-      const bin = Uint8Array.from(atob(cfg.visual.glb), c => c.charCodeAt(0)).buffer;
-      const r = await parseGltf(bin);
+    if (cfg.visual?.glb || bin) {
+      bin ||= Uint8Array.from(atob(cfg.visual.glb), c => c.charCodeAt(0));
+      delete cfg.visual.glb;
+      const r = await parseGltf(bin.buffer.slice(bin.byteOffset, bin.byteOffset + bin.byteLength));
       S.parts = r.parts.map((p, i) => { const meta = cfg.visual.parts?.[i] || {}; return { ...p, ...meta, geo: p.mesh.geometry }; });
       S.fileName = cfg.source;
-      await applyWithModel(cfg, { glb: cfg.visual.glb, parts: cfg.visual.parts || S.parts.map(p => ({ name: p.name, role: p.role, link: p.link, wheel: p.wheel })) });
+      await applyWithModel(cfg, { bin, parts: cfg.visual.parts || S.parts.map(p => ({ name: p.name, role: p.role, link: p.link, wheel: p.wheel })) });
     } else setRobot(cfg);
     summary();
   }
@@ -383,13 +450,13 @@ export function initRobotTab(app, el) {
     try {
       const json = files.find(f => /\.json$/i.test(f.name));
       if (json) { await importJson(await json.text()); progress('Configuration loaded', 1); return; }
-      main = files.find(f => /\.(step|stp|glb|gltf|urdf)$/i.test(f.name)) || files.find(f => /\.stl$/i.test(f.name));
-      if (!main) throw new Error('Choose a .step, .glb, .gltf, .stl, .urdf (with .stl files) or .json file');
+      main = files.find(f => /\.(step|stp|glb|gltf|urdf)$/i.test(f.name)) || files.find(f => /\.(stl|obj)$/i.test(f.name));
+      if (!main) throw new Error('Choose a .step, .glb, .gltf, .stl, .obj, .urdf (with .stl files) or .json file');
       S.fileName = main.name; progress(`Reading ${main.name} (${(main.size / 1e6).toFixed(1)} MB)…`, 0.05);
       let r;
-      if (/\.(step|stp)$/i.test(main.name)) { r = await parseStep(await main.arrayBuffer(), progress); S.opts = { unit: 1, up: 'z', fwd: '+y' }; }
+      if (/\.(step|stp)$/i.test(main.name)) { r = await parseStep(main, progress); S.opts = { unit: 1, up: 'z', fwd: '+y' }; }
       else if (/\.(glb|gltf)$/i.test(main.name)) { r = await parseGltf(await main.arrayBuffer()); S.opts = { unit: 1, up: 'y', fwd: '-y' }; }   // glTF: the front of an asset faces +Z
-      else if (/\.stl$/i.test(main.name)) { r = await parseStl(files.filter(f => /\.stl$/i.test(f.name))); S.opts = { unit: 1, up: 'z', fwd: '+y' }; }
+      else if (/\.(stl|obj)$/i.test(main.name)) { r = await parseMeshFiles(files.filter(f => /\.(stl|obj)$/i.test(f.name)), progress); S.opts = { unit: 1, up: 'z', fwd: '+y' }; }
       else { r = await parseUrdf(await main.text(), files); S.opts = { unit: 1, up: 'z', fwd: '+x' }; }
       S.parts = r.parts; S.urdf = r.urdf || null;
       if (!S.parts.length) throw new Error('No parts (meshes) found in this file');
@@ -404,7 +471,7 @@ export function initRobotTab(app, el) {
         turned = ' Model was sideways, rotated 90°. Check the arrow points forward.';
       }
       $('rbUnit').value = S.opts.unit; $('rbUp').value = S.opts.up; $('rbFwd').value = S.opts.fwd;
-      progress(`Found ${S.parts.length} parts.${unitNote}${turned} Check the setup below, then press Use this robot.`, 1);
+      progress(`Found ${S.parts.length} parts.${unitNote}${turned}${r.note || ''} Check the setup below, then press Use this robot.`, 1);
     } catch (e) {
       const what = main ? `${main.name} (${main.name.split('.').pop().toUpperCase()}, ${(main.size / 1e6).toFixed(1)} MB): ` : '';
       const hint = main && /\.(step|stp)$/i.test(main.name) ? ' Try a smaller sub-assembly, or export GLB/STL.' : '';
@@ -453,10 +520,15 @@ export function initRobotTab(app, el) {
     drawViews();
     $('rbBounds').textContent = `Model size: ${(b.x / IN).toFixed(1)} × ${(b.y / IN).toFixed(1)} × ${(b.z / IN).toFixed(1)} in (X × Y × Z). If this looks wrong, change the units.`;
     const linkOpts = (sel) => ['chassis', ...c.joints.map(j => j.id)].map(id => opt(id, id === 'chassis' ? 'chassis' : 'joint ' + id, id === sel)).join('');
-    $('rbParts').innerHTML = '<tr><th>Part</th><th>Size, mm</th><th>Role</th><th>Moves with</th></tr>' + S.parts.map((p, i) =>
+    // a huge assembly: list the parts that matter (detected devices, then the biggest), not thousands of screws
+    const vol = (p) => p.size[0] * p.size[1] * p.size[2];
+    const shown = S.parts.length <= 300 ? S.parts.map((p, i) => i)
+      : S.parts.map((p, i) => i).sort((a, b) => (S.parts[a].role === 'chassis') - (S.parts[b].role === 'chassis') || vol(S.parts[b]) - vol(S.parts[a])).slice(0, 300).sort((a, b) => a - b);
+    $('rbParts').innerHTML = '<tr><th>Part</th><th>Size, mm</th><th>Role</th><th>Moves with</th></tr>' + shown.map(i => [S.parts[i], i]).map(([p, i]) =>
       `<tr><td title="${esc(p.path || p.name)}">${esc(p.name.slice(0, 38))}</td><td>${p.size.map(v => Math.round(v * 1000)).join('×')}</td>
        <td><select data-i="${i}" data-k="role">${['chassis', 'wheel', 'motor', 'servo', 'sensor', 'link', 'ignore'].map(r => opt(r, { chassis: 'chassis', wheel: 'wheel', motor: 'motor', servo: 'servo', sensor: 'sensor', link: 'joint link', ignore: 'ignore' }[r], p.role === r)).join('')}</select></td>
-       <td><select data-i="${i}" data-k="link">${linkOpts(p.link)}</select></td></tr>`).join('');
+       <td><select data-i="${i}" data-k="link">${linkOpts(p.link)}</select></td></tr>`).join('') +
+      (shown.length < S.parts.length ? `<tr><td colspan="4" class="small" title="Only the detected devices and the biggest parts are listed. The rest stay chassis.">+ ${S.parts.length - shown.length} small parts (chassis)</td></tr>` : '');
     $('rbParts').querySelectorAll('select').forEach(s => s.onchange = () => {
       const p = S.parts[+s.dataset.i]; p[s.dataset.k] = s.value;
       if (s.dataset.k === 'role' && s.value !== 'link') p.link = 'chassis';
@@ -577,8 +649,8 @@ export function initRobotTab(app, el) {
   // restore an uploaded model saved in the browser
   (async () => {
     if (app.robotCfg?.visual?.type === 'model' && !app.robotModel) {
-      const glb = app.robotCfg.visual.glb || await idb.get('model');
-      if (glb) { try { await importJson(JSON.stringify({ ...app.robotCfg, visual: { ...app.robotCfg.visual, glb } })); } catch (e) { console.warn(e); } }
+      const saved = app.robotCfg.visual.glb || await idb.get('model');   // base64 from older versions, bytes now
+      if (saved) { try { await importJson(JSON.stringify({ ...app.robotCfg, visual: { ...app.robotCfg.visual, glb: typeof saved === 'string' ? saved : undefined } }), typeof saved === 'string' ? null : saved); } catch (e) { console.warn(e); } }
     }
   })();
 }
